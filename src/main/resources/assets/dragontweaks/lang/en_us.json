@@ -1,0 +1,13 @@
+{
+  "itemGroup.dragontweaks": "Example Mod Tab",
+  "block.dragontweaks.example_block": "Example Block",
+  "item.dragontweaks.example_item": "Example Item",
+
+  "dragontweaks.configuration.title": "Dragon Tweaks Configs",
+  "dragontweaks.configuration.section.dragontweaks.common.toml": "Dragon Tweaks Configs",
+  "dragontweaks.configuration.section.dragontweaks.common.toml.title": "Dragon Tweaks Configs",
+  "dragontweaks.configuration.items": "Item List",
+  "dragontweaks.configuration.logDirtBlock": "Log Dirt Block",
+  "dragontweaks.configuration.magicNumberIntroduction": "Magic Number Text",
+  "dragontweaks.configuration.magicNumber": "Magic Number"
+}
