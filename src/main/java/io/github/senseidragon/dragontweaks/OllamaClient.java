@@ -97,18 +97,23 @@ public class OllamaClient {
             return;
         }
 
-        HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-            .orTimeout(Config.LLM_TIMEOUT_SECONDS.get(), TimeUnit.SECONDS)
-            .thenApply(response -> parseResponse(response.body()))
-            .thenAccept(reply -> server.execute(() ->
-                player.sendSystemMessage(
-                    Component.literal("[").append(entityName).append("]: " + reply)
-                )
-            ))
-            .exceptionally(ex -> {
-                DragonTweaks.LOGGER.warn("[OllamaClient] LLM request failed: {}", ex.getMessage());
-                server.execute(() -> sendFallback(player, entityName));
-                return null;
-            });
+        try {
+            HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .orTimeout(Config.LLM_TIMEOUT_SECONDS.get(), TimeUnit.SECONDS)
+                .thenApply(response -> parseResponse(response.body()))
+                .thenAccept(reply -> server.execute(() ->
+                    player.sendSystemMessage(
+                        Component.literal("[").append(entityName).append("]: " + reply)
+                    )
+                ))
+                .exceptionally(ex -> {
+                    DragonTweaks.LOGGER.warn("[OllamaClient] LLM request failed: {}", ex.getMessage());
+                    server.execute(() -> sendFallback(player, entityName));
+                    return null;
+                });
+        } catch (Exception e) {
+            DragonTweaks.LOGGER.error("[OllamaClient] Failed to dispatch async request: {}", e.getMessage());
+            server.execute(() -> sendFallback(player, entityName));
+        }
     }
 }
