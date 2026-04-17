@@ -1,6 +1,7 @@
 package io.github.senseidragon.dragontweaks;
 
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.AABB;
@@ -36,15 +37,24 @@ public class ChatInterceptor {
         event.setCanceled(true);
 
         Component entityName = nearest.getCustomName() != null
-                ? nearest.getCustomName()
-                : Component.literal("Assistant [PoC]");
+            ? nearest.getCustomName()
+            : Component.literal("Assistant [PoC]");
+
         player.sendSystemMessage(
-                Component.literal("[").append(entityName).append("]: Hmm...")
+            Component.literal("[").append(entityName).append("]: Hmm...")
         );
 
         DragonTweaks.LOGGER.info("[ChatInterceptor] {} -> {}: {}",
-                player.getGameProfile().getName(),
-                entityName.getString(),
-                rawMessage);
+            player.getGameProfile().getName(),
+            entityName.getString(),
+            rawMessage);
+
+        MinecraftServer server = player.getServer();
+        if (server == null) return;
+
+        String timeOfDay = OllamaClient.timeOfDay(serverLevel.getDayTime());
+        String weather = OllamaClient.weather(serverLevel.isRaining(), serverLevel.isThundering());
+
+        OllamaClient.query(server, player, entityName, rawMessage, timeOfDay, weather);
     }
 }

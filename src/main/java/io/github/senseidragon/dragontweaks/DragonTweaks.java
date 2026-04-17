@@ -9,6 +9,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 
 @Mod(DragonTweaks.MODID)
 public class DragonTweaks {
@@ -22,6 +23,7 @@ public class DragonTweaks {
         modEventBus.addListener(ModEntities::onAttributeCreate);
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
         NeoForge.EVENT_BUS.addListener(ChatInterceptor::onServerChat);
+        NeoForge.EVENT_BUS.addListener((ServerStoppingEvent e) -> OllamaClient.shutdown());
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
