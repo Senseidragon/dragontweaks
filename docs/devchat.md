@@ -49,11 +49,37 @@ Spawn a stationary NPC (villager or equivalent) that:
 
 ---
 
+## Session Log
+
+### Session 2 — Stationary NPC Entity (PoC)
+**Date:** 2026-04-17
+
+#### What was built
+- `ModEntities.java` — `DeferredRegister<EntityType<?>>` bound to the mod event bus; registers `dragontweaks:assistant` entity type. Also handles `EntityAttributeCreationEvent` (required — entities without registered attributes crash on first tick).
+- `AssistantEntity.java` — Extends `PathfinderMob`. Empty `registerGoals()` override keeps it fully stationary. Constructor sets custom name `"Assistant [PoC]"`, `setCustomNameVisible(true)`, and `setPersistenceRequired()`.
+- `AssistantCommand.java` — Registers `/assistant spawn` on the NeoForge game event bus (`@EventBusSubscriber` default). Requires permission level 2. Spawns at the executing player's position on the server thread — no async concerns here.
+- `AssistantRenderer.java` — `HumanoidMobRenderer<AssistantEntity, HumanoidModel<AssistantEntity>>` using `ModelLayers.ZOMBIE` and the vanilla zombie texture. Placeholder until Phase 1 model.
+- `DragonTweaksClientEvents.java` — Separate `@EventBusSubscriber(bus = MOD, value = CLIENT)` class to register the renderer. Required because `EntityRenderersEvent.RegisterRenderers` fires on the mod bus, not the game bus.
+- `DragonTweaks.java` — Added `ModEntities.ENTITY_TYPES.register(modEventBus)` in constructor.
+
+#### Registration pattern confirmed for NeoForge 1.21.1
+`DeferredRegister.create(Registries.ENTITY_TYPE, MODID)` → `.register(name, () -> EntityType.Builder.of(...).sized(...).build(rl.toString()))` → returns `DeferredHolder`. The `DeferredRegister` must be bound to the mod event bus in the `@Mod` constructor. Attribute registration via `EntityAttributeCreationEvent` on the mod bus is mandatory.
+
+#### Threading notes
+Entity registration and spawn command execution both occur on expected threads (init phase and server thread respectively). The Hard Architectural Rules apply when LLM calls are introduced, not to this registration/spawn code.
+
+---
+
 ## Concerns Log
 ### Concern #1 — AI Threading Naivety
 **What happened:** Claude suggested synchronous Ollama HTTP call without flagging threading implications. User had to correct this.
 **Rule added:** Hard Architectural Rule #1, #2, #3 above.
 **Implication:** Do not accept generated code without verifying it respects Minecraft's single-threaded game loop. Explicitly restate threading constraints at the start of any implementation session.
+
+### Concern #2 — Class Existence Not Verified Before Use (1.21.1)
+**What happened:** Claude wrote `AssistantEntity extends HumanoidMob` reasoning from 1.20.1 knowledge. `HumanoidMob` does not exist in Minecraft 1.21.1. The class was removed between versions. This would have been a compile error.
+**Corrected to:** `AssistantEntity extends PathfinderMob`. `HumanoidMobRenderer`'s actual generic constraint is `T extends Mob` (verified from decompiled source), so `PathfinderMob` satisfies it directly — `HumanoidMob` was never needed for the renderer either.
+**Standing rule:** Before using any vanilla or NeoForge class in 1.21.1 code, verify it exists in the decompiled sources at `~/.gradle/caches/ng_execute/.../transformed/`. Do not rely on memory of class names from 1.20.x or earlier. When uncertain, grep the sources first.
 
 ---
 
@@ -79,4 +105,4 @@ Spawn a stationary NPC (villager or equivalent) that:
 
 ---
 
-*Last updated: Session 1 — Pre-PoC*
+*Last updated: Session 2 — Stationary NPC Entity (PoC)*
