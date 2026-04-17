@@ -4,11 +4,16 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class OllamaClient {
 
@@ -41,10 +46,11 @@ public class OllamaClient {
     }
 
     static String parseResponse(String json) {
-        return JsonParser.parseString(json)
-            .getAsJsonObject()
-            .get("response")
-            .getAsString();
+        JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+        if (!obj.has("response") || obj.get("response").isJsonNull()) {
+            throw new IllegalArgumentException("Ollama error response: " + json);
+        }
+        return obj.get("response").getAsString();
     }
 
     private static String buildRequestBody(String model, String prompt) {
@@ -65,5 +71,44 @@ public class OllamaClient {
 
     public static void shutdown() {
         EXECUTOR.shutdownNow();
+    }
+
+    public static void query(MinecraftServer server, ServerPlayer player,
+                             Component entityName, String message,
+                             String timeOfDay, String weather) {
+        if (!Config.LLM_ENABLED.get()) {
+            server.execute(() -> sendFallback(player, entityName));
+            return;
+        }
+
+        String prompt = "Player said: " + message + "\nTime: " + timeOfDay + "\nWeather: " + weather;
+        String requestBody = buildRequestBody(Config.LLM_MODEL.get(), prompt);
+
+        HttpRequest request;
+        try {
+            request = HttpRequest.newBuilder()
+                .uri(URI.create(Config.LLM_ENDPOINT.get()))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .build();
+        } catch (IllegalArgumentException e) {
+            DragonTweaks.LOGGER.error("[OllamaClient] Invalid endpoint URI: {}", e.getMessage());
+            server.execute(() -> sendFallback(player, entityName));
+            return;
+        }
+
+        HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+            .orTimeout(Config.LLM_TIMEOUT_SECONDS.get(), TimeUnit.SECONDS)
+            .thenApply(response -> parseResponse(response.body()))
+            .thenAccept(reply -> server.execute(() ->
+                player.sendSystemMessage(
+                    Component.literal("[").append(entityName).append("]: " + reply)
+                )
+            ))
+            .exceptionally(ex -> {
+                DragonTweaks.LOGGER.warn("[OllamaClient] LLM request failed: {}", ex.getMessage());
+                server.execute(() -> sendFallback(player, entityName));
+                return null;
+            });
     }
 }

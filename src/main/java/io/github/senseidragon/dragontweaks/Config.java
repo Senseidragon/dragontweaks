@@ -34,6 +34,23 @@ public class Config {
             .comment("A list of items to log on common setup.")
             .defineListAllowEmpty("items", List.of("minecraft:iron_ingot"), () -> "", Config::validateItemName);
 
+    // LLM / Ollama settings
+    public static final ModConfigSpec.BooleanValue LLM_ENABLED = BUILDER
+            .comment("Enable Ollama LLM responses for assistant NPCs")
+            .define("llmEnabled", true);
+
+    public static final ModConfigSpec.ConfigValue<String> LLM_ENDPOINT = BUILDER
+            .comment("Ollama API endpoint URL")
+            .define("llmEndpoint", "http://localhost:11434/api/generate");
+
+    public static final ModConfigSpec.ConfigValue<String> LLM_MODEL = BUILDER
+            .comment("Ollama model name to use")
+            .define("llmModel", "llama3");
+
+    public static final ModConfigSpec.IntValue LLM_TIMEOUT_SECONDS = BUILDER
+            .comment("Timeout in seconds for LLM requests")
+            .defineInRange("llmTimeoutSeconds", 15, 1, 120);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     private static boolean validateItemName(final Object obj) {
