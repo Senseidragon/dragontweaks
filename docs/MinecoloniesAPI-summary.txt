@@ -1,0 +1,193 @@
+● Here's a structured summary of the MineColonies public API:                                                                   
+                                                                                                                                               
+  ---                                     
+  MineColonies API Overview                                                                                                                    
+                                                                                          
+  Entry Point                                                                                                                                  
+                                                                                                                                               
+  Everything starts from one singleton:                                                                                                        
+                                                                                                                                               
+  IMinecoloniesAPI api = IMinecoloniesAPI.getInstance();                                                                                       
+
+  From there you branch into managers and subsystems.
+
+  ---
+  Major Systems
+
+  Colony Manager
+
+  IColonyManager manager = api.getColonyManager();
+
+  // Find colonies
+  IColony colony = manager.getColonyByWorld(id, world);
+  IColony colony = manager.getColonyByPosFromWorld(world, blockPos);
+  List<IColony> all = manager.getColonies(world);
+  IColony nearest = manager.getClosestColony(world, pos);
+  IColony mine = manager.getIColonyByOwner(world, player);
+
+  // Create / delete
+  manager.createColony(world, pos, player, name, pack);
+  manager.deleteColonyByDimension(id, canDestroy, dimension);
+
+  // Validation
+  manager.isFarEnoughFromColonies(world, pos);
+
+  IColony (server-side, mutable)
+
+  colony.getID();
+  colony.getName() / colony.setName(String);
+  colony.getCenter();
+  colony.isCoordInColony(world, pos);
+  colony.getPermissions();        // IPermissions
+  colony.getCitizenManager();     // ICitizenManager
+  colony.getServerBuildingManager();
+  colony.getResearchManager();
+  colony.getStatisticsManager();
+  colony.getQuestManager();
+  colony.getEventManager();
+  colony.getRequestManager();
+
+  IColonyView (client-side, read-only)
+
+  view.getCitizens();             // Map<Integer, ICitizenDataView>
+  view.getCitizenCount() / getCitizenCountLimit();
+  view.getOverallHappiness();
+  view.getWorkOrders();
+  view.getPlayers();              // players + ranks
+
+  ---
+  Citizens
+
+  ┌──────────────────┬────────┬───────────────────────────────────────────────────┐
+  │    Interface     │  Side  │                        Use                        │
+  ├──────────────────┼────────┼───────────────────────────────────────────────────┤
+  │ ICitizen         │ Both   │ Lightweight: ID, name, inventory, saturation      │
+  ├──────────────────┼────────┼───────────────────────────────────────────────────┤
+  │ ICitizenData     │ Server │ Full data: job, home, bed, skills, family, health │
+  ├──────────────────┼────────┼───────────────────────────────────────────────────┤
+  │ ICitizenDataView │ Client │ Read-only view of above                           │
+  └──────────────────┴────────┴───────────────────────────────────────────────────┘
+
+  Key ICitizenData access:
+  data.getJob();
+  data.getWorkBuilding();
+  data.getHomeBuilding();
+  data.getCitizenSkillHandler();
+  data.getCitizenHappinessHandler();
+  data.getEntity();               // Optional<AbstractEntityCitizen>
+  data.getPartner();
+  data.getChildren();
+
+  ---
+  Buildings
+
+  IBuilding building = colony.getServerBuildingManager().getBuilding(pos);
+
+  building.getLevel() / building.getMaxLevel();
+  building.isBuilt() / building.isPendingConstruction();
+  building.requestUpgrade(player, pos);
+  building.requestRepair(pos);
+  building.getCustomName() / building.setCustomBuildingName(name);
+  building.createRequest(citizenData, requestable, async);
+
+  ---
+  Permissions
+
+  IPermissions perms = colony.getPermissions();
+
+  perms.hasPermission(player, Action.BUILD);
+  perms.getRank(player);
+  perms.setPlayerRank(uuid, rank, world);
+  perms.addPlayer(uuid, name, rank);
+  perms.getRankOwner() / getRankOfficer() / getRankFriend();
+  // Standard ranks: Owner(0), Officer(1), Friend(2), Neutral(3), Hostile(4)
+
+  ---
+  Events
+
+  api.getEventBus().subscribe(CitizenAddedModEvent.class, event -> { ... });
+  api.getEventBus().subscribe(ColonyCreatedModEvent.class, event -> { ... });
+
+  Available events:
+  - Colony: ColonyCreatedModEvent, ColonyDeletedModEvent, ColonyNameChangedModEvent, ColonyFlagChangedModEvent, ColonyViewUpdatedModEvent
+  - Buildings: BuildingAddedModEvent, BuildingRemovedModEvent, BuildingConstructionModEvent
+  - Citizens: CitizenAddedModEvent, CitizenRemovedModEvent, CitizenDiedModEvent, CitizenJobChangedModEvent
+  - Players: PlayerEnteringModEvent, PlayerLeavingModEvent
+
+  ---
+  Registries (for addon authors)
+
+  Access via IMinecoloniesAPI.getInstance():
+
+  ┌──────────────────────────────────┬───────────────────────────────┐
+  │             Registry             │         What it's for         │
+  ├──────────────────────────────────┼───────────────────────────────┤
+  │ getBuildingRegistry()            │ Custom building types         │
+  ├──────────────────────────────────┼───────────────────────────────┤
+  │ getJobRegistry()                 │ Custom citizen jobs           │
+  ├──────────────────────────────────┼───────────────────────────────┤
+  │ getBuildingExtensionRegistry()   │ Building modules              │
+  ├──────────────────────────────────┼───────────────────────────────┤
+  │ getGuardTypeRegistry()           │ Guard variants                │
+  ├──────────────────────────────────┼───────────────────────────────┤
+  │ getResearchEffectRegistry()      │ Custom research rewards       │
+  ├──────────────────────────────────┼───────────────────────────────┤
+  │ getResearchRequirementRegistry() │ Custom research prerequisites │
+  ├──────────────────────────────────┼───────────────────────────────┤
+  │ getRecipeTypeRegistry()          │ Custom recipe types           │
+  ├──────────────────────────────────┼───────────────────────────────┤
+  │ getCraftingTypeRegistry()        │ Custom crafting methods       │
+  ├──────────────────────────────────┼───────────────────────────────┤
+  │ getQuestRewardRegistry()         │ Custom quest rewards          │
+  ├──────────────────────────────────┼───────────────────────────────┤
+  │ getColonyEventRegistry()         │ Custom in-game colony events  │
+  ├──────────────────────────────────┼───────────────────────────────┤
+  │ getModelTypeRegistry() (client)  │ Custom citizen render models  │
+  └──────────────────────────────────┴───────────────────────────────┘
+
+  ---
+  Recipe / Request System
+
+  // Check / fulfill a recipe
+  IRecipeStorage recipe = ...;
+  recipe.getInput();              // List<ItemStorage>
+  recipe.getPrimaryOutput();      // ItemStack
+  recipe.canFullFillRecipe(qty, existingItems, handlers...);
+  recipe.fullfillRecipe(world, handlers);
+
+  // Create a work request from a building
+  IToken<?> token = building.createRequest(citizenData, requestable, false);
+
+  ---
+  Minimal Addon Quickstart
+
+  // 1. Get API on server startup / world load
+  IMinecoloniesAPI api = IMinecoloniesAPI.getInstance();
+
+  // 2. Subscribe to events
+  api.getEventBus().subscribe(CitizenDiedModEvent.class, event -> {
+      IColony colony = event.getColony();
+      // react to citizen death
+  });
+
+  // 3. Query colonies in a command or event
+  IColony colony = api.getColonyManager().getColonyByPosFromWorld(world, pos);
+  if (colony != null) {
+      int pop = colony.getCitizenManager().getCurrentCitizenCount();
+      boolean canBuild = colony.getPermissions().hasPermission(player, Action.BUILD);
+  }
+
+  // 4. Register a custom building type (during mod init)
+  api.getBuildingRegistry().register(
+      new BuildingEntry.Builder()
+          .setBuildingProducer(MyBuilding::new)
+          .setBuildingViewProducer(MyBuildingView::new)
+          .setRegistryName(new ResourceLocation("myaddon", "mybuilding"))
+          .build()
+  );
+
+  ---
+  Side note on server vs. client: IColony is server-side (mutable). On the client you get IColonyView instead — mostly read-only. The colony
+  manager returns the appropriate type automatically depending on which logical side you're on.
+
+✻ Churned for 2m 25s                 

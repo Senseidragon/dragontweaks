@@ -1,4 +1,4 @@
-# DragonTweaks / The Assistant Mod — Session Continuity Document
+claude# DragonTweaks / The Assistant Mod — Session Continuity Document
 
 ## Project Identity
 - **Mod Name (working):** The Assistant Mod (final name TBD)
