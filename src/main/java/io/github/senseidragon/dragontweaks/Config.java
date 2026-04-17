@@ -28,7 +28,7 @@ public class Config {
 
     public static final ModConfigSpec.IntValue LLM_TIMEOUT_SECONDS = BUILDER
             .comment("Seconds to wait for an LLM response before falling back to templates")
-            .defineInRange("llmTimeoutSeconds", 60, 5, 120);
+            .defineInRange("llmTimeoutSeconds", 90, 5, 180);
 
     static final ModConfigSpec SPEC = BUILDER.build();
 
