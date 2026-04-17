@@ -27,7 +27,8 @@ sourceSets.main.resources {
 }
 
 repositories {
-    // Add here additional repositories if required by some of the dependencies below.
+    maven { url "https://ldtteam.jfrog.io/ldtteam/modding/" }
+    flatDir { dirs 'libs' }
 }
 
 base {
@@ -115,9 +116,20 @@ neoForge {
 // "optional", meaning it will not be pulled by dependents of this mod.
 configurations {
     runtimeClasspath.extendsFrom localRuntime
+    modRuntime
+
 }
 
 dependencies {
+    // MineColonies NeoForge 1.21.1 — local JAR (not on public Maven)
+    compileOnly files('libs/minecolonies-1.1.1299-1.21.1-snapshot.jar')
+
+    // MineColonies + its required dependencies — copied into run/mods so NeoForge discovers them
+    modRuntime files('libs/minecolonies-1.1.1299-1.21.1-snapshot.jar')
+    modRuntime files('libs/structurize-1.0.820-1.21.1-snapshot.jar')
+    modRuntime files('libs/domum-ornamentum-1.0.233-snapshot-main.jar')
+    modRuntime files('libs/blockui-1.0.211-1.21.1-snapshot.jar')
+
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"
@@ -164,6 +176,14 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
 sourceSets.main.resources.srcDir generateModMetadata
 // To avoid having to run "generateModMetadata" manually, make it run on every project reload
 neoForge.ideSyncTask generateModMetadata
+
+// Copy MineColonies and its dependencies into run/mods so NeoForge discovers them
+tasks.register('copyDevMods', Copy) {
+    from configurations.modRuntime
+    into layout.projectDirectory.dir('run/mods')
+}
+tasks.named('runClient') { dependsOn 'copyDevMods' }
+tasks.named('runServer') { dependsOn 'copyDevMods' }
 
 // Example configuration to allow publishing using the maven-publish plugin
 publishing {
