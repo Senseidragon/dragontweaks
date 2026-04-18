@@ -78,7 +78,8 @@ public class ChatInterceptor {
                 entityName.getString(),
                 rawMessage);
 
-            OllamaClient.query(server, player, entityName, rawMessage, target.getRole(), timeOfDay, weather);
+            String surroundings = OllamaClient.scanSurroundings(serverLevel, target);
+            OllamaClient.query(server, player, entityName, rawMessage, target.getRole(), timeOfDay, weather, surroundings);
         }
     }
 }
