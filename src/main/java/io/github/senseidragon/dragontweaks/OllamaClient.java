@@ -26,10 +26,17 @@ public class OllamaClient {
 
     private static final Gson GSON = new Gson();
 
-    private static String buildSystemPrompt(String npcName) {
-        return "You are " + npcName + ", a villager in a medieval colony. " +
-               "Respond in 1-2 short sentences, in character as " + npcName + ". " +
-               "Never say you are an AI. Never break character or reference Minecraft.";
+    private static String buildSystemPrompt(String npcName, String role, String playerName, String timeOfDay, String weather) {
+        return "You are " + npcName + ", a " + role + " in a medieval village.\n" +
+               "You live in a world where creepers explode, endermen are unsettling tall dark figures that dislike eye contact, " +
+               "zombies and skeletons roam at night, and emeralds are common currency. " +
+               "Farming, mining, and crafting are everyday activities. " +
+               "Refer to all of these as natural parts of your world — they are real to you. " +
+               "Never reference \"the game\", \"players\", \"code\", or anything that breaks the sense that this is a real place you live in.\n" +
+               "The person speaking to you is named " + playerName + ".\n" +
+               "It is currently " + timeOfDay + " and the weather is " + weather + ". " +
+               "You are aware of your surroundings but only mention them when it feels natural.\n" +
+               "Respond as " + npcName + " in 1-2 short sentences. Never break character. Never say you are an AI.";
     }
 
     static String timeOfDay(long dayTime) {
@@ -54,11 +61,12 @@ public class OllamaClient {
         return obj.get("response").getAsString();
     }
 
-    private static String buildRequestBody(String model, String prompt, String npcName) {
+    private static String buildRequestBody(String model, String message, String npcName, String role,
+                                            String playerName, String timeOfDay, String weather) {
         JsonObject obj = new JsonObject();
         obj.addProperty("model", model);
-        obj.addProperty("system", buildSystemPrompt(npcName));
-        obj.addProperty("prompt", prompt);
+        obj.addProperty("system", buildSystemPrompt(npcName, role, playerName, timeOfDay, weather));
+        obj.addProperty("prompt", message);
         obj.addProperty("stream", false);
         obj.addProperty("think", false);
         JsonObject options = new JsonObject();
@@ -79,7 +87,7 @@ public class OllamaClient {
     }
 
     public static void query(MinecraftServer server, ServerPlayer player,
-                             Component entityName, String message,
+                             Component entityName, String message, String role,
                              String timeOfDay, String weather) {
         if (!Config.LLM_ENABLED.get()) {
             server.execute(() -> sendFallback(player, entityName));
@@ -87,8 +95,8 @@ public class OllamaClient {
         }
 
         String npcName = entityName.getString();
-        String prompt = "Player said: " + message + "\nTime: " + timeOfDay + "\nWeather: " + weather;
-        String requestBody = buildRequestBody(Config.LLM_MODEL.get(), prompt, npcName);
+        String playerName = player.getGameProfile().getName();
+        String requestBody = buildRequestBody(Config.LLM_MODEL.get(), message, npcName, role, playerName, timeOfDay, weather);
 
         HttpRequest request;
         try {

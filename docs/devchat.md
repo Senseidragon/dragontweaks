@@ -168,4 +168,60 @@ private static String buildSystemPrompt(String npcName) {
 
 ---
 
-*Last updated: Session 3 — Ollama Performance Benchmarking (2026-04-18)*
+### Session 4 — NPC Personality and Context Expansion
+**Date:** 2026-04-18
+
+#### Tasks for Claude Code
+
+##### Task A: Expand spawn command to accept name and role arguments
+- Change `/assistant spawn` to `/assistant spawn "<name>" "<role>"` — both arguments quoted strings to support multi-word values (e.g. "Grumpy Joe", "village herbalist").
+- `AssistantEntity` needs a `role` String field with getter/setter.
+- Role must be persisted to NBT (`addAdditionalSaveData` / `readAdditionalSaveData`) so it survives chunk unloads and server restarts.
+- Name is already set via `setCustomName()` — no change needed there.
+- If no arguments provided, fall back to defaults: name = "Assistant", role = "villager".
+
+##### Task B: Inject player name into prompt
+- `OllamaClient.query()` already receives `ServerPlayer player` — extract `player.getGameProfile().getName()` and pass it into `buildRequestBody()`.
+- Add to the prompt context: `"The person speaking to you is named [playerName]."`
+- NPC should address the player by name naturally, not every sentence.
+
+##### Task C: Inject role into system prompt
+- `OllamaClient.query()` must also accept `String role` parameter (sourced from `AssistantEntity.getRole()`).
+- `buildSystemPrompt(String npcName, String role)` replaces `buildSystemPrompt(String npcName)`.
+- System prompt should incorporate role naturally, e.g. "You are [name], a [role] in a medieval village."
+- `ChatInterceptor` must retrieve role from the nearest `AssistantEntity` and pass it through.
+
+##### Task D: Minecraft world awareness in system prompt
+Add the following context to `buildSystemPrompt()` — after the name/role introduction, before the response rules:
+```
+You live in a world where creepers explode, endermen are unsettling tall 
+dark figures that dislike eye contact, zombies and skeletons roam at night, 
+and emeralds are common currency. Farming, mining, and crafting are everyday 
+activities. Refer to all of these as natural parts of your world — they are 
+real to you. Never reference "the game", "players", "code", or anything that 
+breaks the sense that this is a real place you live in.
+```
+
+##### Full target system prompt shape
+```
+You are [npcName], a [role] in a medieval village.
+You live in a world where creepers explode, endermen are unsettling tall dark 
+figures that dislike eye contact, zombies and skeletons roam at night, and 
+emeralds are common currency. Farming, mining, and crafting are everyday 
+activities. Refer to all of these as natural parts of your world — they are 
+real to you. Never reference "the game", "players", "code", or anything that 
+breaks the sense that this is a real place you live in.
+The person speaking to you is named [playerName].
+It is currently [timeOfDay] and the weather is [weather].
+Respond as [npcName] in 1-2 short sentences. Never break character. Never say you are an AI.
+```
+
+##### Method signature changes required
+- `buildSystemPrompt(String npcName)` → `buildSystemPrompt(String npcName, String role)`
+- `buildRequestBody(String model, String prompt)` → `buildRequestBody(String model, String prompt, String npcName, String role, String playerName, String timeOfDay, String weather)`
+- `OllamaClient.query(...)` → add `String role` and `String playerName` parameters
+- `ChatInterceptor.onServerChat(...)` → retrieve `nearest.getRole()` and `player.getGameProfile().getName()`, pass both to `OllamaClient.query()`
+
+---
+
+*Last updated: Session 4 — NPC Personality and Context Expansion (2026-04-18)*

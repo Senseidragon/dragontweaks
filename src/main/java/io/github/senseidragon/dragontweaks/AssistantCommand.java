@@ -15,16 +15,9 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
 import java.util.List;
-import java.util.random.RandomGenerator;
 
 @EventBusSubscriber(modid = DragonTweaks.MODID)
 public class AssistantCommand {
-
-    private static final List<String> RANDOM_NAMES = List.of(
-        "Aldric", "Brenna", "Caden", "Dessa", "Emric",
-        "Faye", "Gareth", "Hilda", "Isak", "Jora",
-        "Kellan", "Lysa", "Maren", "Niels", "Orra"
-    );
 
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
@@ -32,9 +25,13 @@ public class AssistantCommand {
             Commands.literal("assistant")
                 .requires(src -> src.hasPermission(2))
                 .then(Commands.literal("spawn")
-                    .executes(ctx -> spawnWithName(ctx, randomName()))
-                    .then(Commands.argument("name", StringArgumentType.greedyString())
-                        .executes(ctx -> spawnWithName(ctx, StringArgumentType.getString(ctx, "name")))
+                    .executes(ctx -> spawnWithNameAndRole(ctx, "Assistant", "villager"))
+                    .then(Commands.argument("name", StringArgumentType.string())
+                        .then(Commands.argument("role", StringArgumentType.string())
+                            .executes(ctx -> spawnWithNameAndRole(ctx,
+                                StringArgumentType.getString(ctx, "name"),
+                                StringArgumentType.getString(ctx, "role")))
+                        )
                     )
                 )
                 .then(Commands.literal("delete")
@@ -46,11 +43,7 @@ public class AssistantCommand {
         );
     }
 
-    private static String randomName() {
-        return RANDOM_NAMES.get(RandomGenerator.getDefault().nextInt(RANDOM_NAMES.size()));
-    }
-
-    private static int spawnWithName(CommandContext<CommandSourceStack> ctx, String name) throws CommandSyntaxException {
+    private static int spawnWithNameAndRole(CommandContext<CommandSourceStack> ctx, String name, String role) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
         ServerLevel level = player.serverLevel();
 
@@ -61,10 +54,11 @@ public class AssistantCommand {
         }
 
         entity.setCustomName(Component.literal(name));
+        entity.setRole(role);
         entity.moveTo(player.getX(), player.getY(), player.getZ(), player.getYRot(), 0f);
         level.addFreshEntity(entity);
 
-        ctx.getSource().sendSuccess(() -> Component.literal(name + " spawned."), false);
+        ctx.getSource().sendSuccess(() -> Component.literal(name + " (" + role + ") spawned."), false);
         return 1;
     }
 
