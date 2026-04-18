@@ -3,6 +3,8 @@ package io.github.senseidragon.dragontweaks;
 import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
+import java.util.List;
+
 public class Config {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
@@ -13,6 +15,14 @@ public class Config {
     public static final ModConfigSpec.IntValue COMMAND_PROXIMITY = BUILDER
             .comment("Radius in blocks within which a player's chat is heard by assigned citizens")
             .defineInRange("commandProximity", 10, 4, 32);
+
+    public static final ModConfigSpec.DoubleValue NPC_AWARENESS_RADIUS = BUILDER
+            .comment("Radius in blocks around an NPC within which it can perceive nearby entities")
+            .defineInRange("npcAwarenessRadius", 16.0, 4.0, 64.0);
+
+    public static final ModConfigSpec.ConfigValue<String> NPC_AWARENESS_CATEGORY = BUILDER
+            .comment("Which entity categories the NPC is aware of: PASSIVE, HOSTILE, or ALL")
+            .defineInList("npcAwarenessCategory", "PASSIVE", List.of("PASSIVE", "HOSTILE", "ALL"));
 
     public static final ModConfigSpec.BooleanValue LLM_ENABLED = BUILDER
             .comment("Enable LLM-backed responses via Ollama. If false, all responses use template fallbacks")
