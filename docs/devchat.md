@@ -1,4 +1,4 @@
-claude# DragonTweaks / The Assistant Mod — Session Continuity Document
+# DragonTweaks / The Assistant Mod — Session Continuity Document
 
 ## Project Identity
 - **Mod Name (working):** The Assistant Mod (final name TBD)
@@ -20,6 +20,32 @@ claude# DragonTweaks / The Assistant Mod — Session Continuity Document
 
 ---
 
+## Ollama / LLM Configuration — Non-Negotiable
+These were validated by direct benchmarking on SENSEI hardware (RTX 2060 6GB, gemma4:26b Q4_K_M).
+
+- **`"think": false` is mandatory in every API call.** Thinking mode adds ~55 seconds of chain-of-thought overhead per query. With thinking disabled, gemma4:26b responds in ~5 seconds. Never omit this parameter.
+- **`"num_predict": 100` must be set in every API call.** The model is verbose by default and will produce multi-paragraph responses without this cap. NPC responses must be short.
+- **`"stream": false` required.** Streaming complicates async handling with no benefit for this use case.
+- **LLM responses are immersion only.** They are flavor text, not functional output. The mod must never depend on response content for game logic. Fallback templates are always acceptable and expected.
+- **System prompt must enforce brevity and character voice.** Example: "You are [name], a [role] in a medieval village. Respond in 1-2 short sentences, in character. Never break character or reference Minecraft."
+- **Model tag must be explicit:** `gemma4:26b` — not `gemma4` or `gemma4:latest` (different model, different size).
+
+### Validated buildRequestBody parameters
+```json
+{
+  "model": "gemma4:26b",
+  "system": "<character prompt>",
+  "prompt": "<player message with context>",
+  "stream": false,
+  "think": false,
+  "options": {
+    "num_predict": 100
+  }
+}
+```
+
+---
+
 ## Current Development Phase
 **PoC Phase — pre-Phase 1**
 Validating core technical risks before committing to full architecture.
@@ -35,7 +61,7 @@ Spawn a stationary NPC (villager or equivalent) that:
 ### PoC Success Criteria
 - Game thread never blocked during Ollama call
 - Async round trip works reliably
-- Latency is acceptable or masked effectively
+- Latency is acceptable or masked effectively (~5-10 seconds with think:false)
 - Fallback to template on timeout works silently
 
 ---
@@ -46,6 +72,8 @@ Spawn a stationary NPC (villager or equivalent) that:
 - **60 second timeout** before fallback to template response (per design doc)
 - **PoC before Phase 1** — validate unknowns before building framework
 - **Short, focused sessions preferred** over long sprawling ones to minimize context drift
+- **`think: false` always** — non-negotiable, validated by benchmarking
+- **`num_predict: 100` always** — non-negotiable, enforces immersion-appropriate response length
 
 ---
 
@@ -67,6 +95,41 @@ Spawn a stationary NPC (villager or equivalent) that:
 
 #### Threading notes
 Entity registration and spawn command execution both occur on expected threads (init phase and server thread respectively). The Hard Architectural Rules apply when LLM calls are introduced, not to this registration/spawn code.
+
+### Session 3 — Ollama Performance Benchmarking
+**Date:** 2026-04-18
+
+#### Findings
+- gemma4:26b with thinking enabled: 1-2 minutes per query. Unacceptable.
+- gemma4:26b with `think: false`: ~5 seconds per query. Acceptable for PoC.
+- Hardware ceiling: RTX 2060 6GB can only fit 7-8 of 31 model layers on GPU. Remaining layers run on CPU. This is a hardware limitation, not a configuration problem.
+- Docker Desktop running on boot steals ~500MB VRAM, reducing GPU layers from 8 to 7. Minor impact.
+- Response verbosity is a prompting problem, not a model problem. `num_predict: 100` + tight system prompt resolves it.
+- `gemma4:latest` (9.6GB) and `gemma4:26b` (17GB) are different models. Always specify `:26b` explicitly.
+
+#### Impact on integration plan
+The `buildRequestBody` method in `OllamaClient.java` (Task 2, Step 1) must be updated to include `think: false` and `num_predict: 100`. The existing plan does not include these parameters. Claude Code must add them before the integration is considered complete.
+
+### Session 3 Addendum — Chat Echo and NPC Identity
+**Date:** 2026-04-18
+
+#### What was fixed
+- **Chat echo:** Player messages were being swallowed by `event.setCanceled(true)` with no visible record in chat. Fixed by adding `player.sendSystemMessage(Component.literal("<" + player.getGameProfile().getName() + "> " + rawMessage))` immediately before `event.setCanceled(true)` in `ChatInterceptor.java`. Working and validated in-game.
+
+#### Outstanding fix required — NPC identity
+- **Problem:** `SYSTEM_PROMPT` in `OllamaClient.java` is a static constant with no NPC name. The LLM invents its own name (tested: NPC named Marcus responded as "Elric"). This is confirmed broken.
+- **Required change:** Replace the static `SYSTEM_PROMPT` constant with a `buildSystemPrompt(String npcName)` method:
+```java
+private static String buildSystemPrompt(String npcName) {
+    return "You are " + npcName + ", a farmhand in a medieval village. " +
+           "Respond in 1-2 short sentences, in character as " + npcName + ". " +
+           "Never say you are an AI. Never break character.";
+}
+```
+- `buildRequestBody` must accept `npcName` as a parameter and call `buildSystemPrompt(npcName)`.
+- `OllamaClient.query()` must accept `npcName` as a parameter and pass it to `buildRequestBody`.
+- `ChatInterceptor.java` already has `entityName` in scope — pass `entityName.getString()` to `OllamaClient.query()`.
+- **Do not hardcode any NPC name.** It must always come from the entity's custom name at runtime.
 
 ---
 
@@ -105,4 +168,4 @@ Entity registration and spawn command execution both occur on expected threads (
 
 ---
 
-*Last updated: Session 2 — Stationary NPC Entity (PoC)*
+*Last updated: Session 3 — Ollama Performance Benchmarking (2026-04-18)*

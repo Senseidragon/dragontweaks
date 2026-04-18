@@ -26,11 +26,11 @@ public class OllamaClient {
 
     private static final Gson GSON = new Gson();
 
-    private static final String SYSTEM_PROMPT =
-        "You are a villager in a medieval colony. " +
-        "You are aware of the time of day and weather. " +
-        "Respond in 1-2 short sentences, in character. " +
-        "Never break character or reference Minecraft.";
+    private static String buildSystemPrompt(String npcName) {
+        return "You are " + npcName + ", a villager in a medieval colony. " +
+               "Respond in 1-2 short sentences, in character as " + npcName + ". " +
+               "Never say you are an AI. Never break character or reference Minecraft.";
+    }
 
     static String timeOfDay(long dayTime) {
         long t = dayTime % 24000;
@@ -54,10 +54,10 @@ public class OllamaClient {
         return obj.get("response").getAsString();
     }
 
-    private static String buildRequestBody(String model, String prompt) {
+    private static String buildRequestBody(String model, String prompt, String npcName) {
         JsonObject obj = new JsonObject();
         obj.addProperty("model", model);
-        obj.addProperty("system", SYSTEM_PROMPT);
+        obj.addProperty("system", buildSystemPrompt(npcName));
         obj.addProperty("prompt", prompt);
         obj.addProperty("stream", false);
         obj.addProperty("think", false);
@@ -86,8 +86,9 @@ public class OllamaClient {
             return;
         }
 
+        String npcName = entityName.getString();
         String prompt = "Player said: " + message + "\nTime: " + timeOfDay + "\nWeather: " + weather;
-        String requestBody = buildRequestBody(Config.LLM_MODEL.get(), prompt);
+        String requestBody = buildRequestBody(Config.LLM_MODEL.get(), prompt, npcName);
 
         HttpRequest request;
         try {

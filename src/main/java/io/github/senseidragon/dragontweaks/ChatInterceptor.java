@@ -34,6 +34,9 @@ public class ChatInterceptor {
         if (nearest == null) return;
 
         String rawMessage = event.getRawText();
+        player.sendSystemMessage(
+                Component.literal("<" + player.getGameProfile().getName() + "> " + rawMessage)
+        );
         event.setCanceled(true);
 
         Component entityName = nearest.getCustomName() != null
