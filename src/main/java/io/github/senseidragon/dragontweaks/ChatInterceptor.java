@@ -7,6 +7,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.event.ServerChatEvent;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class ChatInterceptor {
@@ -22,36 +23,34 @@ public class ChatInterceptor {
         if (candidates.isEmpty()) return;
 
         String messageLower = event.getRawText().toLowerCase();
+        String[] messageWords = messageLower.split("\\s+");
 
-        // Prefer an NPC whose name tokens appear in the message; fall back to nearest.
+        List<AssistantEntity> matched = new ArrayList<>();
         AssistantEntity nearest = null;
-        double nearestDistSq = range * range;
-        AssistantEntity named = null;
-        double namedDistSq = Double.MAX_VALUE;
+        double nearestDistSq = Double.MAX_VALUE;
 
         for (AssistantEntity candidate : candidates) {
             double distSq = player.distanceToSqr(candidate);
-
+            if (distSq < nearestDistSq) {
+                nearestDistSq = distSq;
+                nearest = candidate;
+            }
             if (candidate.getCustomName() != null) {
-                for (String token : candidate.getCustomName().getString().split("\\s+")) {
-                    if (!token.isEmpty() && messageLower.contains(token.toLowerCase())) {
-                        if (distSq < namedDistSq) {
-                            namedDistSq = distSq;
-                            named = candidate;
-                        }
+                String entityName = candidate.getCustomName().getString();
+                for (String word : messageWords) {
+                    if (!word.isEmpty() && AssistantCommand.nameMatches(entityName, word)) {
+                        matched.add(candidate);
                         break;
                     }
                 }
             }
-
-            if (distSq <= nearestDistSq) {
-                nearestDistSq = distSq;
-                nearest = candidate;
-            }
         }
 
-        nearest = (named != null) ? named : nearest;
-        if (nearest == null) return;
+        List<AssistantEntity> targets = matched.isEmpty()
+            ? (nearest != null ? List.of(nearest) : List.of())
+            : matched;
+
+        if (targets.isEmpty()) return;
 
         String rawMessage = event.getRawText();
         player.sendSystemMessage(
@@ -59,25 +58,27 @@ public class ChatInterceptor {
         );
         event.setCanceled(true);
 
-        Component entityName = nearest.getCustomName() != null
-            ? nearest.getCustomName()
-            : Component.literal("Assistant [PoC]");
-
-        player.sendSystemMessage(
-            Component.literal("[").append(entityName).append("]: Hmm...")
-        );
-
-        DragonTweaks.LOGGER.info("[ChatInterceptor] {} -> {}: {}",
-            player.getGameProfile().getName(),
-            entityName.getString(),
-            rawMessage);
-
         MinecraftServer server = player.getServer();
         if (server == null) return;
 
         String timeOfDay = OllamaClient.timeOfDay(serverLevel.getDayTime());
         String weather = OllamaClient.weather(serverLevel.isRaining(), serverLevel.isThundering());
 
-        OllamaClient.query(server, player, entityName, rawMessage, nearest.getRole(), timeOfDay, weather);
+        for (AssistantEntity target : targets) {
+            Component entityName = target.getCustomName() != null
+                ? target.getCustomName()
+                : Component.literal("Assistant [PoC]");
+
+            player.sendSystemMessage(
+                Component.literal("[").append(entityName).append("]: Hmm...")
+            );
+
+            DragonTweaks.LOGGER.info("[ChatInterceptor] {} -> {}: {}",
+                player.getGameProfile().getName(),
+                entityName.getString(),
+                rawMessage);
+
+            OllamaClient.query(server, player, entityName, rawMessage, target.getRole(), timeOfDay, weather);
+        }
     }
 }

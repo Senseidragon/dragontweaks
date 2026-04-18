@@ -96,7 +96,7 @@ public class AssistantCommand {
         for (AssistantEntity candidate : level.getEntitiesOfClass(
                 AssistantEntity.class, new AABB(-3e7, -3e7, -3e7, 3e7, 3e7, 3e7))) {
             if (candidate.getCustomName() == null) continue;
-            if (!candidate.getCustomName().getString().equalsIgnoreCase(name)) continue;
+            if (!nameMatches(candidate.getCustomName().getString(), name)) continue;
             double distSq = player.distanceToSqr(candidate);
             if (distSq < nearestDistSq) {
                 nearestDistSq = distSq;
@@ -112,5 +112,11 @@ public class AssistantCommand {
         nearest.discard();
         ctx.getSource().sendSuccess(() -> Component.literal(name + " removed."), false);
         return 1;
+    }
+
+    static boolean nameMatches(String entityName, String token) {
+        String e = entityName.toLowerCase();
+        String t = token.toLowerCase();
+        return e.contains(t) || t.contains(e);
     }
 }
