@@ -96,7 +96,7 @@ public class AssistantCommand {
         for (AssistantEntity candidate : level.getEntitiesOfClass(
                 AssistantEntity.class, new AABB(-3e7, -3e7, -3e7, 3e7, 3e7, 3e7))) {
             if (candidate.getCustomName() == null) continue;
-            if (!candidate.getCustomName().getString().equals(name)) continue;
+            if (!candidate.getCustomName().getString().equalsIgnoreCase(name)) continue;
             double distSq = player.distanceToSqr(candidate);
             if (distSq < nearestDistSq) {
                 nearestDistSq = distSq;
