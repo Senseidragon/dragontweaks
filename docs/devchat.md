@@ -27,7 +27,7 @@ These were validated by direct benchmarking on SENSEI hardware (RTX 2060 6GB, ge
 - **`"num_predict": 100` must be set in every API call.** The model is verbose by default and will produce multi-paragraph responses without this cap. NPC responses must be short.
 - **`"stream": false` required.** Streaming complicates async handling with no benefit for this use case.
 - **LLM responses are immersion only.** They are flavor text, not functional output. The mod must never depend on response content for game logic. Fallback templates are always acceptable and expected.
-- **System prompt must enforce brevity and character voice.** Example: "You are [name], a [role] in a medieval village. Respond in 1-2 short sentences, in character. Never break character or reference Minecraft."
+- **System prompt must enforce brevity and character voice.** See validated prompt shape below.
 - **Model tag must be explicit:** `gemma4:26b` — not `gemma4` or `gemma4:latest` (different model, different size).
 
 ### Validated buildRequestBody parameters
@@ -44,25 +44,39 @@ These were validated by direct benchmarking on SENSEI hardware (RTX 2060 6GB, ge
 }
 ```
 
+### Validated system prompt shape
+```
+You are [npcName], a [role] in a medieval village.
+You live in a world where creepers explode, endermen are unsettling tall dark
+figures that dislike eye contact, zombies and skeletons roam at night, and
+emeralds are common currency. Farming, mining, and crafting are everyday
+activities. Refer to all of these as natural parts of your world — they are
+real to you. Never reference "the game", "players", "code", or anything that
+breaks the sense that this is a real place you live in.
+The person speaking to you is named [playerName].
+It is currently [timeOfDay] and the weather is [weather].
+You are aware of your surroundings but only mention them when it feels natural.
+Respond as [npcName] in 1-2 short sentences. Never break character. Never say you are an AI.
+```
+
 ---
 
 ## Current Development Phase
-**PoC Phase — pre-Phase 1**
-Validating core technical risks before committing to full architecture.
+**Phase 1 — Core Framework**
+PoC complete and validated. All core technical risks cleared.
 
-### PoC Goal
-Spawn a stationary NPC (villager or equivalent) that:
-- Does not wander
-- Intercepts player chat within proximity radius (~8-10 blocks)
-- Fires async Ollama/Gemma4 request with minimal context payload (time of day, weather)
-- Delivers LLM response as in-world chat attributed to the NPC
-- Handles timeout/fallback gracefully without breaking immersion
+### PoC — COMPLETE (2026-04-18)
+All success criteria met and validated in-game:
+- Game thread never blocked ✓
+- Async round trip reliable ✓
+- Latency acceptable (~5 seconds with think:false) ✓
+- Fallback to template on timeout works silently ✓
+- Proximity cutoff working correctly ✓
+- NPC identity, player name, role, and Minecraft world awareness all functioning ✓
 
-### PoC Success Criteria
-- Game thread never blocked during Ollama call
-- Async round trip works reliably
-- Latency is acceptable or masked effectively (~5-10 seconds with think:false)
-- Fallback to template on timeout works silently
+### Remaining cleanup tasks before Phase 1 code begins
+- **Prompt refinement:** "You are aware of your surroundings but only mention them when it feels natural." already added to validated prompt shape above. Ensure `buildSystemPrompt()` matches exactly.
+- **Remove command partial name match:** `/assistant remove` currently does exact name match. "Jack" fails to match "Jack Dawson". Fix to support partial/case-insensitive name matching, or show a clear usage error stating full name is required.
 
 ---
 
@@ -74,6 +88,12 @@ Spawn a stationary NPC (villager or equivalent) that:
 - **Short, focused sessions preferred** over long sprawling ones to minimize context drift
 - **`think: false` always** — non-negotiable, validated by benchmarking
 - **`num_predict: 100` always** — non-negotiable, enforces immersion-appropriate response length
+- **Environmental context is available but not forced** — NPCs mention time/weather when natural, not every response
+
+---
+
+## Known Limitations — Deferred
+- **NPC cross-awareness:** NPCs have no knowledge of other NPCs' actual roles. Hega knows Jack is her husband (from role description) but invents his activities (said he was mining; he's a farmer). Acceptable at PoC stage. Will be resolved when MineColonies citizen data provides proper relationship and role context.
 
 ---
 
@@ -85,51 +105,37 @@ Spawn a stationary NPC (villager or equivalent) that:
 #### What was built
 - `ModEntities.java` — `DeferredRegister<EntityType<?>>` bound to the mod event bus; registers `dragontweaks:assistant` entity type. Also handles `EntityAttributeCreationEvent` (required — entities without registered attributes crash on first tick).
 - `AssistantEntity.java` — Extends `PathfinderMob`. Empty `registerGoals()` override keeps it fully stationary. Constructor sets custom name `"Assistant [PoC]"`, `setCustomNameVisible(true)`, and `setPersistenceRequired()`.
-- `AssistantCommand.java` — Registers `/assistant spawn` on the NeoForge game event bus (`@EventBusSubscriber` default). Requires permission level 2. Spawns at the executing player's position on the server thread — no async concerns here.
+- `AssistantCommand.java` — Registers `/assistant spawn "<name>" "<role>"` on the NeoForge game event bus. Requires permission level 2. Spawns at the executing player's position on the server thread.
 - `AssistantRenderer.java` — `HumanoidMobRenderer<AssistantEntity, HumanoidModel<AssistantEntity>>` using `ModelLayers.ZOMBIE` and the vanilla zombie texture. Placeholder until Phase 1 model.
 - `DragonTweaksClientEvents.java` — Separate `@EventBusSubscriber(bus = MOD, value = CLIENT)` class to register the renderer. Required because `EntityRenderersEvent.RegisterRenderers` fires on the mod bus, not the game bus.
 - `DragonTweaks.java` — Added `ModEntities.ENTITY_TYPES.register(modEventBus)` in constructor.
+- `OllamaClient.java` — Async HTTP client on dedicated single-thread executor. Handles query(), buildSystemPrompt(), buildRequestBody(), parseResponse(), sendFallback(), shutdown().
+- `ChatInterceptor.java` — Intercepts ServerChatEvent, finds nearest AssistantEntity within range, echoes player message, sends "Hmm...", fires async OllamaClient.query().
 
 #### Registration pattern confirmed for NeoForge 1.21.1
 `DeferredRegister.create(Registries.ENTITY_TYPE, MODID)` → `.register(name, () -> EntityType.Builder.of(...).sized(...).build(rl.toString()))` → returns `DeferredHolder`. The `DeferredRegister` must be bound to the mod event bus in the `@Mod` constructor. Attribute registration via `EntityAttributeCreationEvent` on the mod bus is mandatory.
-
-#### Threading notes
-Entity registration and spawn command execution both occur on expected threads (init phase and server thread respectively). The Hard Architectural Rules apply when LLM calls are introduced, not to this registration/spawn code.
 
 ### Session 3 — Ollama Performance Benchmarking
 **Date:** 2026-04-18
 
 #### Findings
 - gemma4:26b with thinking enabled: 1-2 minutes per query. Unacceptable.
-- gemma4:26b with `think: false`: ~5 seconds per query. Acceptable for PoC.
-- Hardware ceiling: RTX 2060 6GB can only fit 7-8 of 31 model layers on GPU. Remaining layers run on CPU. This is a hardware limitation, not a configuration problem.
-- Docker Desktop running on boot steals ~500MB VRAM, reducing GPU layers from 8 to 7. Minor impact.
-- Response verbosity is a prompting problem, not a model problem. `num_predict: 100` + tight system prompt resolves it.
-- `gemma4:latest` (9.6GB) and `gemma4:26b` (17GB) are different models. Always specify `:26b` explicitly.
+- gemma4:26b with `think: false`: ~5 seconds per query. Acceptable.
+- Hardware ceiling: RTX 2060 6GB fits 7-8 of 31 layers on GPU. Hardware limitation, not config.
+- Docker Desktop on boot steals ~500MB VRAM. Minor but worth noting.
+- `gemma4:latest` (9.6GB) and `gemma4:26b` (17GB) are different models. Always specify `:26b`.
 
-#### Impact on integration plan
-The `buildRequestBody` method in `OllamaClient.java` (Task 2, Step 1) must be updated to include `think: false` and `num_predict: 100`. The existing plan does not include these parameters. Claude Code must add them before the integration is considered complete.
-
-### Session 3 Addendum — Chat Echo and NPC Identity
+### Session 4 — NPC Personality, Context, PoC Validation
 **Date:** 2026-04-18
 
-#### What was fixed
-- **Chat echo:** Player messages were being swallowed by `event.setCanceled(true)` with no visible record in chat. Fixed by adding `player.sendSystemMessage(Component.literal("<" + player.getGameProfile().getName() + "> " + rawMessage))` immediately before `event.setCanceled(true)` in `ChatInterceptor.java`. Working and validated in-game.
-
-#### Outstanding fix required — NPC identity
-- **Problem:** `SYSTEM_PROMPT` in `OllamaClient.java` is a static constant with no NPC name. The LLM invents its own name (tested: NPC named Marcus responded as "Elric"). This is confirmed broken.
-- **Required change:** Replace the static `SYSTEM_PROMPT` constant with a `buildSystemPrompt(String npcName)` method:
-```java
-private static String buildSystemPrompt(String npcName) {
-    return "You are " + npcName + ", a farmhand in a medieval village. " +
-           "Respond in 1-2 short sentences, in character as " + npcName + ". " +
-           "Never say you are an AI. Never break character.";
-}
-```
-- `buildRequestBody` must accept `npcName` as a parameter and call `buildSystemPrompt(npcName)`.
-- `OllamaClient.query()` must accept `npcName` as a parameter and pass it to `buildRequestBody`.
-- `ChatInterceptor.java` already has `entityName` in scope — pass `entityName.getString()` to `OllamaClient.query()`.
-- **Do not hardcode any NPC name.** It must always come from the entity's custom name at runtime.
+#### What was completed
+- Chat echo implemented in ChatInterceptor — player messages visible in chat before cancellation.
+- NPC identity fixed — `buildSystemPrompt(String npcName, String role)` replaces static constant.
+- Player name injected into prompt via `player.getGameProfile().getName()`.
+- Role injected via `AssistantEntity.getRole()`, persisted to NBT.
+- Minecraft world awareness added to system prompt — validated in-game (Endermen, Creepers, emeralds referenced naturally without immersion breaks).
+- Spawn command expanded to `/assistant spawn "<name>" "<role>"` supporting multi-word values.
+- PoC fully validated. NPC-to-player conversation working correctly across weather, time of day, and topic changes.
 
 ---
 
@@ -140,8 +146,8 @@ private static String buildSystemPrompt(String npcName) {
 **Implication:** Do not accept generated code without verifying it respects Minecraft's single-threaded game loop. Explicitly restate threading constraints at the start of any implementation session.
 
 ### Concern #2 — Class Existence Not Verified Before Use (1.21.1)
-**What happened:** Claude wrote `AssistantEntity extends HumanoidMob` reasoning from 1.20.1 knowledge. `HumanoidMob` does not exist in Minecraft 1.21.1. The class was removed between versions. This would have been a compile error.
-**Corrected to:** `AssistantEntity extends PathfinderMob`. `HumanoidMobRenderer`'s actual generic constraint is `T extends Mob` (verified from decompiled source), so `PathfinderMob` satisfies it directly — `HumanoidMob` was never needed for the renderer either.
+**What happened:** Claude wrote `AssistantEntity extends HumanoidMob` reasoning from 1.20.1 knowledge. `HumanoidMob` does not exist in Minecraft 1.21.1.
+**Corrected to:** `AssistantEntity extends PathfinderMob`.
 **Standing rule:** Before using any vanilla or NeoForge class in 1.21.1 code, verify it exists in the decompiled sources at `~/.gradle/caches/ng_execute/.../transformed/`. Do not rely on memory of class names from 1.20.x or earlier. When uncertain, grep the sources first.
 
 ---
@@ -168,60 +174,4 @@ private static String buildSystemPrompt(String npcName) {
 
 ---
 
-### Session 4 — NPC Personality and Context Expansion
-**Date:** 2026-04-18
-
-#### Tasks for Claude Code
-
-##### Task A: Expand spawn command to accept name and role arguments
-- Change `/assistant spawn` to `/assistant spawn "<name>" "<role>"` — both arguments quoted strings to support multi-word values (e.g. "Grumpy Joe", "village herbalist").
-- `AssistantEntity` needs a `role` String field with getter/setter.
-- Role must be persisted to NBT (`addAdditionalSaveData` / `readAdditionalSaveData`) so it survives chunk unloads and server restarts.
-- Name is already set via `setCustomName()` — no change needed there.
-- If no arguments provided, fall back to defaults: name = "Assistant", role = "villager".
-
-##### Task B: Inject player name into prompt
-- `OllamaClient.query()` already receives `ServerPlayer player` — extract `player.getGameProfile().getName()` and pass it into `buildRequestBody()`.
-- Add to the prompt context: `"The person speaking to you is named [playerName]."`
-- NPC should address the player by name naturally, not every sentence.
-
-##### Task C: Inject role into system prompt
-- `OllamaClient.query()` must also accept `String role` parameter (sourced from `AssistantEntity.getRole()`).
-- `buildSystemPrompt(String npcName, String role)` replaces `buildSystemPrompt(String npcName)`.
-- System prompt should incorporate role naturally, e.g. "You are [name], a [role] in a medieval village."
-- `ChatInterceptor` must retrieve role from the nearest `AssistantEntity` and pass it through.
-
-##### Task D: Minecraft world awareness in system prompt
-Add the following context to `buildSystemPrompt()` — after the name/role introduction, before the response rules:
-```
-You live in a world where creepers explode, endermen are unsettling tall 
-dark figures that dislike eye contact, zombies and skeletons roam at night, 
-and emeralds are common currency. Farming, mining, and crafting are everyday 
-activities. Refer to all of these as natural parts of your world — they are 
-real to you. Never reference "the game", "players", "code", or anything that 
-breaks the sense that this is a real place you live in.
-```
-
-##### Full target system prompt shape
-```
-You are [npcName], a [role] in a medieval village.
-You live in a world where creepers explode, endermen are unsettling tall dark 
-figures that dislike eye contact, zombies and skeletons roam at night, and 
-emeralds are common currency. Farming, mining, and crafting are everyday 
-activities. Refer to all of these as natural parts of your world — they are 
-real to you. Never reference "the game", "players", "code", or anything that 
-breaks the sense that this is a real place you live in.
-The person speaking to you is named [playerName].
-It is currently [timeOfDay] and the weather is [weather].
-Respond as [npcName] in 1-2 short sentences. Never break character. Never say you are an AI.
-```
-
-##### Method signature changes required
-- `buildSystemPrompt(String npcName)` → `buildSystemPrompt(String npcName, String role)`
-- `buildRequestBody(String model, String prompt)` → `buildRequestBody(String model, String prompt, String npcName, String role, String playerName, String timeOfDay, String weather)`
-- `OllamaClient.query(...)` → add `String role` and `String playerName` parameters
-- `ChatInterceptor.onServerChat(...)` → retrieve `nearest.getRole()` and `player.getGameProfile().getName()`, pass both to `OllamaClient.query()`
-
----
-
-*Last updated: Session 4 — NPC Personality and Context Expansion (2026-04-18)*
+*Last updated: Session 4 — PoC Complete, Phase 1 begins (2026-04-18)*
