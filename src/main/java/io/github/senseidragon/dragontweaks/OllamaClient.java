@@ -27,9 +27,10 @@ public class OllamaClient {
     private static final Gson GSON = new Gson();
 
     private static final String SYSTEM_PROMPT =
-        "You are a helpful assistant NPC in a Minecraft colony. " +
+        "You are a villager in a medieval colony. " +
         "You are aware of the time of day and weather. " +
-        "Respond in character, briefly (2-3 sentences).";
+        "Respond in 1-2 short sentences, in character. " +
+        "Never break character or reference Minecraft.";
 
     static String timeOfDay(long dayTime) {
         long t = dayTime % 24000;
@@ -59,6 +60,10 @@ public class OllamaClient {
         obj.addProperty("system", SYSTEM_PROMPT);
         obj.addProperty("prompt", prompt);
         obj.addProperty("stream", false);
+        obj.addProperty("think", false);
+        JsonObject options = new JsonObject();
+        options.addProperty("num_predict", 100);
+        obj.add("options", options);
         return GSON.toJson(obj);
     }
 
