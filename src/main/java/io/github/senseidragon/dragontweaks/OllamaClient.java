@@ -58,7 +58,7 @@ public class OllamaClient {
     }
 
     static String scanSurroundings(ServerLevel level, AssistantEntity npc) {
-        double radius = Config.NPC_AWARENESS_RADIUS.get();
+        double radius = Config.NPC_AWARENESS_RADIUS.get().doubleValue();
         AABB box = AABB.ofSize(npc.position(), radius * 2, radius * 2, radius * 2);
         String category = Config.NPC_AWARENESS_CATEGORY.get();
 
