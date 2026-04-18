@@ -58,6 +58,6 @@ public class ChatInterceptor {
         String timeOfDay = OllamaClient.timeOfDay(serverLevel.getDayTime());
         String weather = OllamaClient.weather(serverLevel.isRaining(), serverLevel.isThundering());
 
-        OllamaClient.query(server, player, entityName, rawMessage, timeOfDay, weather);
+        OllamaClient.query(server, player, entityName, rawMessage, nearest.getRole(), timeOfDay, weather);
     }
 }
