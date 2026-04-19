@@ -38,7 +38,8 @@ public class ChatInterceptor {
             if (candidate.getCustomName() != null) {
                 String entityName = candidate.getCustomName().getString();
                 for (String word : messageWords) {
-                    if (!word.isEmpty() && AssistantCommand.nameMatches(entityName, word)) {
+                    String stripped = word.replaceAll("[^a-z0-9]", "");
+                    if (!stripped.isEmpty() && AssistantCommand.nameMatches(entityName, stripped)) {
                         matched.add(candidate);
                         break;
                     }
@@ -53,6 +54,15 @@ public class ChatInterceptor {
         if (targets.isEmpty()) return;
 
         String rawMessage = event.getRawText();
+
+        // Keyword detection — runs before Ollama query; state change is immediate
+        boolean isFollowIntent = containsAny(messageLower, "follow", "come with", "walk with me", "come along", "come here", "follow me");
+        boolean isStopIntent  = containsAny(messageLower, "stop", "stay", "wait here", "stay put", "stand still", "wait for me");
+        if (isFollowIntent) {
+            for (AssistantEntity target : targets) target.setFollowing(true);
+        } else if (isStopIntent) {
+            for (AssistantEntity target : targets) target.setFollowing(false);
+        }
         player.sendSystemMessage(
                 Component.literal("<" + player.getGameProfile().getName() + "> " + rawMessage)
         );
@@ -81,5 +91,12 @@ public class ChatInterceptor {
             String surroundings = OllamaClient.scanSurroundings(serverLevel, target);
             OllamaClient.query(server, player, entityName, rawMessage, target.getRole(), timeOfDay, weather, surroundings, target.getUUID());
         }
+    }
+
+    private static boolean containsAny(String message, String... phrases) {
+        for (String phrase : phrases) {
+            if (message.contains(phrase)) return true;
+        }
+        return false;
     }
 }
