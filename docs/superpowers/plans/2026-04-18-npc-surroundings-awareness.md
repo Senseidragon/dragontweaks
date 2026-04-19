@@ -25,7 +25,7 @@
 **Files:**
 - Modify: `src/main/java/io/github/senseidragon/dragontweaks/Config.java`
 
-- [ ] **Add NPC_AWARENESS_RADIUS and NPC_AWARENESS_CATEGORY** after the existing `COMMAND_PROXIMITY` entry:
+- [x] **Add NPC_AWARENESS_RADIUS and NPC_AWARENESS_CATEGORY** after the existing `COMMAND_PROXIMITY` entry:
 
 ```java
 import java.util.List;  // add to imports if not present
@@ -39,7 +39,7 @@ public static final ModConfigSpec.ConfigValue<String> NPC_AWARENESS_CATEGORY = B
         .defineInList("npcAwarenessCategory", "PASSIVE", List.of("PASSIVE", "HOSTILE", "ALL"));
 ```
 
-- [ ] **Commit**
+- [x] **Commit**
 
 ```bash
 git add src/main/java/io/github/senseidragon/dragontweaks/Config.java
@@ -53,7 +53,7 @@ git commit -m "feat: add NPC awareness radius and category config"
 **Files:**
 - Modify: `src/main/java/io/github/senseidragon/dragontweaks/OllamaClient.java`
 
-- [ ] **Add imports** at the top of OllamaClient.java (after existing imports):
+- [x] **Add imports** at the top of OllamaClient.java (after existing imports):
 
 ```java
 import net.minecraft.server.level.ServerLevel;
@@ -66,7 +66,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 ```
 
-- [ ] **Add `scanSurroundings()` and `entityDisplayName()`** as static methods after the existing `weather()` method:
+- [x] **Add `scanSurroundings()` and `entityDisplayName()`** as static methods after the existing `weather()` method:
 
 ```java
 static String scanSurroundings(ServerLevel level, AssistantEntity npc) {
@@ -105,7 +105,7 @@ private static String entityDisplayName(Entity entity) {
 }
 ```
 
-- [ ] **Update `buildSystemPrompt()`** — add `String surroundings` parameter and append the line:
+- [x] **Update `buildSystemPrompt()`** — add `String surroundings` parameter and append the line:
 
 Replace the existing method signature and last line:
 
@@ -126,7 +126,7 @@ private static String buildSystemPrompt(String npcName, String role, String play
 }
 ```
 
-- [ ] **Update `buildRequestBody()`** — add `String surroundings` parameter and pass it through:
+- [x] **Update `buildRequestBody()`** — add `String surroundings` parameter and pass it through:
 
 ```java
 private static String buildRequestBody(String model, String message, String npcName, String role,
@@ -145,7 +145,7 @@ private static String buildRequestBody(String model, String message, String npcN
 }
 ```
 
-- [ ] **Update `query()`** — add `String surroundings` parameter and pass to `buildRequestBody()`:
+- [x] **Update `query()`** — add `String surroundings` parameter and pass to `buildRequestBody()`:
 
 ```java
 public static void query(MinecraftServer server, ServerPlayer player,
@@ -195,7 +195,7 @@ public static void query(MinecraftServer server, ServerPlayer player,
 }
 ```
 
-- [ ] **Commit**
+- [x] **Commit**
 
 ```bash
 git add src/main/java/io/github/senseidragon/dragontweaks/OllamaClient.java
@@ -209,7 +209,7 @@ git commit -m "feat: add surroundings scan and prompt injection to OllamaClient"
 **Files:**
 - Modify: `src/main/java/io/github/senseidragon/dragontweaks/ChatInterceptor.java`
 
-- [ ] **Inside the `for (AssistantEntity target : targets)` loop**, add the scan call and pass `surroundings` to `query()`. Replace the existing loop body:
+- [x] **Inside the `for (AssistantEntity target : targets)` loop**, add the scan call and pass `surroundings` to `query()`. Replace the existing loop body:
 
 ```java
 for (AssistantEntity target : targets) {
@@ -231,7 +231,7 @@ for (AssistantEntity target : targets) {
 }
 ```
 
-- [ ] **Commit**
+- [x] **Commit**
 
 ```bash
 git add src/main/java/io/github/senseidragon/dragontweaks/ChatInterceptor.java
@@ -242,7 +242,7 @@ git commit -m "feat: pass surroundings context to OllamaClient per NPC"
 
 ### Task 4: Build and verify
 
-- [ ] **Build**
+- [x] **Build**
 
 ```bash
 ./gradlew build
@@ -250,8 +250,13 @@ git commit -m "feat: pass surroundings context to OllamaClient per NPC"
 
 Expected: `BUILD SUCCESSFUL`
 
-- [ ] **In-game validation checklist**
+- [x] **In-game validation checklist**
   - Spawn an NPC near some pigs/chickens. Ask "what can you see around you?" — NPC should mention the animals.
   - Clear the area. Ask again — NPC should respond with empty-area flavor, no hallucinated animals.
   - Set `npcAwarenessCategory = HOSTILE` in config. Spawn a zombie nearby. Ask — NPC should mention the zombie, not the pigs.
   - Confirm prompts not forced — ask unrelated question; NPC should not gratuitously list surroundings every response.
+
+---
+
+**Status: COMPLETE (2026-04-18, Session 7)**  
+Note: `NPC_AWARENESS_RADIUS` was corrected from `DoubleValue` to `IntValue` during implementation (NeoForge config validation error). The `query()` signature shown above is outdated — Sessions 9–10 added `npcId`/`playerName` parameters for conversation memory, but surroundings is fully wired through.
