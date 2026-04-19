@@ -5,6 +5,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Collections;
 
 public class ConversationMemory {
 
@@ -37,5 +38,16 @@ public class ConversationMemory {
 
     public static void clearAll(UUID npcId) {
         MEMORY.remove(npcId);
+    }
+
+    public static Map<String, Deque<String>> getAll(UUID npcId) {
+        Map<String, Deque<String>> npcMemory = MEMORY.get(npcId);
+        return npcMemory != null ? npcMemory : Collections.emptyMap();
+    }
+
+    public static void restoreAll(UUID npcId, Map<String, Deque<String>> history) {
+        if (!history.isEmpty()) {
+            MEMORY.put(npcId, new HashMap<>(history));
+        }
     }
 }

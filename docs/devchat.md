@@ -366,18 +366,77 @@ If no history exists for this player+NPC pair yet, omit the `[Prior conversation
 - Validated: Jack's memory of Senseidragon is separate from Hega's memory of Senseidragon.
 - Validated: `/assistant remove Jack` clears Jack's history map entirely.
 
-#### What was completed (2026-04-19)
-- **`ConversationMemory.java`** — Static utility class. `Map<UUID, Map<String, Deque<String>>>`. 10-exchange cap per player per NPC. Keys by NPC UUID (not name) and lowercase player name.
-- **`OllamaClient.query()`** — Signature extended with `UUID npcId`. History injected into user prompt as `[Prior conversation:]` block if present. `ConversationMemory.addExchange()` called on game thread after response delivered.
-- **`ChatInterceptor`** — Passes `target.getUUID()` to `query()`.
-- **`AssistantCommand`** — Calls `ConversationMemory.clearAll()` on both `deleteNearest` and `deleteAll`.
-- **Executor resurrection fix** — `EXECUTOR` and `HTTP` changed from `final` to mutable. `ensureAlive()` recreates both if executor was shut down between world loads. Called at top of `query()`.
-- **LLM warmup** — `OllamaClient.warmup()` fires on `ServerStartedEvent`. Sends `num_predict:1`, `think:false`, `stream:false` — same code path as real queries. Logs `LLM ready` or `LLM unreachable`. Pre-loads model layers before first player interaction.
-
 #### Constraints — do not violate
 - **Do not refactor OllamaClient to per-instance.** Static is correct. Memory lives in ConversationMemory, not OllamaClient.
 - **In-memory only.** No NBT persistence this session.
 - **`num_predict` stays at 100.** History injection lengthens the prompt; response cap does not change.
 - **Hard Architectural Rules 1–3 still apply.** History read/write on game thread; Ollama HTTP on async thread; responses queued back to game thread before any chat output.
 
-*Last updated: Session 9 complete (2026-04-19)*
+*Last updated: Session 9 task written (2026-04-19)*
+
+---
+
+### Session 10 — NBT Persistence for Conversation Memory
+**Date:** 2026-04-19
+
+#### Goal
+Conversation history survives full game exit and JVM restart. History is written to NBT on the `AssistantEntity` itself and read back on entity load. No new dependencies. Fully testable in superflat testbed by exiting to desktop and relaunching.
+
+#### Architecture context
+`ConversationMemory` is currently a static map keyed by `UUID → playerName → Deque<String>`. It survives log out/in within the same JVM session but is wiped on full game exit. NBT persistence means writing the history map to the entity's NBT data on save and restoring it on load. The entity's own NBT is the correct location — history belongs to the entity, travels with it, and is discarded automatically when the entity is removed from the world.
+
+#### Pre-check for Claude Code — verify entity removal behavior
+Before writing any NBT code, verify how NeoForge 1.21.1 handles entity NBT on removal. Confirm that when an entity is removed via `entity.discard()` or equivalent, its NBT data does not persist anywhere independently. If there is any doubt, add an explicit NBT clear step in `AssistantCommand` on `/assistant remove` before the entity is discarded. Do not assume — check the sources.
+
+#### Design decisions
+
+**NBT structure:** History is stored as a compound tag on the entity under key `"dragontweaks:conversation_history"`. Structure:
+```
+dragontweaks:conversation_history (CompoundTag)
+  └── "Senseidragon" (ListTag of StringTag)
+        ├── "Senseidragon: How are the crops?"
+        ├── "Hega: The rye is coming in well."
+        └── ...
+  └── "OtherPlayer" (ListTag of StringTag)
+        └── ...
+```
+
+**Write timing:** Override `addAdditionalSaveData(CompoundTag)` in `AssistantEntity` to serialize the history map. This is called automatically by Minecraft on chunk save and world save.
+
+**Read timing:** Override `readAdditionalSaveData(CompoundTag)` in `AssistantEntity` to deserialize and restore the history map into `ConversationMemory` keyed by the entity's UUID. This is called automatically on entity load.
+
+**Cleanup on removal:** When `/assistant remove` is called:
+1. Call `ConversationMemory.clearAll(entity.getUUID())` — clears in-memory map.
+2. Call `entity.getPersistentData().remove("dragontweaks:conversation_history")` — explicitly clears NBT before discard.
+3. Then discard the entity.
+No digital litter — both in-memory and on-disk state are explicitly cleared.
+
+**New entity, clean slate:** A new entity spawned with the same name as a removed entity gets a new UUID. `ConversationMemory` is keyed by UUID. No history inheritance is possible by design.
+
+#### Files to create/modify
+- **Modify:** `AssistantEntity.java` — override `addAdditionalSaveData()` to write history to NBT; override `readAdditionalSaveData()` to read history from NBT and restore into `ConversationMemory`.
+- **Modify:** `AssistantCommand.java` — on `/assistant remove`, explicitly clear NBT data before entity discard, in addition to existing `ConversationMemory.clearAll()` call.
+- **Modify:** `ConversationMemory.java` — add `getAll(UUID npcId) → Map<String, Deque<String>>` and `restoreAll(UUID npcId, Map<String, Deque<String>>)` methods to support serialization/deserialization from `AssistantEntity`.
+- **No changes** to `OllamaClient`, `ChatInterceptor`, `Config`, `ModEntities`, `AssistantRenderer`.
+
+#### Definition of done
+- `./gradlew build` passes.
+- Validated in-game: tell NPC a named detail (e.g. your nickname, a family member's name), exit to desktop fully, relaunch, re-enter world, ask NPC about the detail — NPC recalls it correctly.
+- Validated: `/assistant remove` followed by `/assistant spawn` with the same name produces an NPC with no memory of prior conversations.
+- Validated: no NBT data remains after removal — check entity NBT in-game via F3+I or equivalent if available.
+
+#### Constraints — do not violate
+- History is stored on the entity's own NBT — not in a separate file, not in world saved data, not in a static config.
+- Do not increase history cap. Still 10 exchanges per player per NPC.
+- `num_predict` stays at 100.
+- Hard Architectural Rules 1–3 still apply.
+- In-memory map remains the live working store. NBT is purely persistence (write on save, read on load). Do not read from NBT on every query.
+
+#### What was completed (2026-04-19)
+- `ConversationMemory.getAll(UUID)` and `restoreAll(UUID, Map)` added — used by entity serialization.
+- `AssistantEntity.addAdditionalSaveData()` serializes the full history map to a `CompoundTag` under `dragontweaks:conversation_history`. Each player entry is a `ListTag` of alternating player/NPC lines.
+- `AssistantEntity.readAdditionalSaveData()` deserializes and restores into `ConversationMemory` keyed by entity UUID.
+- `AssistantCommand` required no changes — `ConversationMemory.clearAll()` already called in both delete paths; entity discard naturally removes it from future saves.
+- Pre-check confirmed: `discard()` removes the entity from the world's entity list; it will not be included in the next chunk save. No extra NBT clear step needed.
+
+*Last updated: Session 10 complete (2026-04-19)*
