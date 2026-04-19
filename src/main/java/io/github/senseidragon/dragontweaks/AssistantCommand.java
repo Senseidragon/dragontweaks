@@ -40,6 +40,18 @@ public class AssistantCommand {
                         .executes(ctx -> deleteNearest(ctx, StringArgumentType.getString(ctx, "name")))
                     )
                 )
+                .then(Commands.literal("follow")
+                    .executes(ctx -> setFollowStateNearest(ctx, true))
+                    .then(Commands.argument("name", StringArgumentType.greedyString())
+                        .executes(ctx -> setFollowState(ctx, StringArgumentType.getString(ctx, "name"), true))
+                    )
+                )
+                .then(Commands.literal("stop")
+                    .executes(ctx -> setFollowStateNearest(ctx, false))
+                    .then(Commands.argument("name", StringArgumentType.greedyString())
+                        .executes(ctx -> setFollowState(ctx, StringArgumentType.getString(ctx, "name"), false))
+                    )
+                )
         );
     }
 
@@ -113,6 +125,70 @@ public class AssistantCommand {
         ConversationMemory.clearAll(nearest.getUUID());
         nearest.discard();
         ctx.getSource().sendSuccess(() -> Component.literal(name + " removed."), false);
+        return 1;
+    }
+
+    private static int setFollowStateNearest(CommandContext<CommandSourceStack> ctx, boolean follow) {
+        ServerPlayer player = ctx.getSource().getPlayer();
+        if (player == null) {
+            ctx.getSource().sendFailure(Component.literal("This command must be run by a player."));
+            return 0;
+        }
+        ServerLevel level = player.serverLevel();
+
+        AssistantEntity nearest = null;
+        double nearestDistSq = Double.MAX_VALUE;
+        for (AssistantEntity candidate : level.getEntitiesOfClass(
+                AssistantEntity.class, player.getBoundingBox().inflate(64))) {
+            double distSq = player.distanceToSqr(candidate);
+            if (distSq < nearestDistSq) {
+                nearestDistSq = distSq;
+                nearest = candidate;
+            }
+        }
+
+        if (nearest == null) {
+            ctx.getSource().sendFailure(Component.literal("No assistant nearby."));
+            return 0;
+        }
+
+        nearest.setFollowing(follow);
+        String entityName = nearest.getCustomName() != null ? nearest.getCustomName().getString() : "Assistant";
+        String verb = follow ? "following." : "stopped.";
+        ctx.getSource().sendSuccess(() -> Component.literal(entityName + " is now " + verb), false);
+        return 1;
+    }
+
+    private static int setFollowState(CommandContext<CommandSourceStack> ctx, String name, boolean follow) {
+        ServerPlayer player = ctx.getSource().getPlayer();
+        if (player == null) {
+            ctx.getSource().sendFailure(Component.literal("This command must be run by a player."));
+            return 0;
+        }
+        ServerLevel level = player.serverLevel();
+
+        AssistantEntity nearest = null;
+        double nearestDistSq = Double.MAX_VALUE;
+        for (AssistantEntity candidate : level.getEntitiesOfClass(
+                AssistantEntity.class, new AABB(-3e7, -3e7, -3e7, 3e7, 3e7, 3e7))) {
+            if (candidate.getCustomName() == null) continue;
+            if (!nameMatches(candidate.getCustomName().getString(), name)) continue;
+            double distSq = player.distanceToSqr(candidate);
+            if (distSq < nearestDistSq) {
+                nearestDistSq = distSq;
+                nearest = candidate;
+            }
+        }
+
+        if (nearest == null) {
+            ctx.getSource().sendFailure(Component.literal("No assistant named '" + name + "' found."));
+            return 0;
+        }
+
+        nearest.setFollowing(follow);
+        String verb = follow ? "following." : "stopped.";
+        String entityName = nearest.getCustomName().getString();
+        ctx.getSource().sendSuccess(() -> Component.literal(entityName + " is now " + verb), false);
         return 1;
     }
 
