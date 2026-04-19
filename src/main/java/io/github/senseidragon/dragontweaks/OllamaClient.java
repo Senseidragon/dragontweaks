@@ -48,7 +48,9 @@ public class OllamaClient {
 
     private static String buildSystemPrompt(String npcName, String role, String playerName,
                                              String timeOfDay, String weather, String surroundings) {
+        String personaBlock = RolePersona.getPersonaBlock(role);
         return "You are " + npcName + ", a " + role + " in a medieval village.\n" +
+               (personaBlock.isEmpty() ? "" : personaBlock + "\n") +
                "You live in a world where creepers explode, endermen are unsettling tall dark figures that dislike eye contact, " +
                "zombies and skeletons roam at night, and emeralds are common currency. " +
                "Farming, mining, and crafting are everyday activities. " +
