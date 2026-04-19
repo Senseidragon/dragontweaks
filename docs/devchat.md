@@ -377,7 +377,7 @@ If no history exists for this player+NPC pair yet, omit the `[Prior conversation
 ---
 
 ### Session 10 — NBT Persistence for Conversation Memory
-**Date:** 2026-04-19
+**Date:** TBD
 
 #### Goal
 Conversation history survives full game exit and JVM restart. History is written to NBT on the `AssistantEntity` itself and read back on entity load. No new dependencies. Fully testable in superflat testbed by exiting to desktop and relaunching.
@@ -432,11 +432,57 @@ No digital litter — both in-memory and on-disk state are explicitly cleared.
 - Hard Architectural Rules 1–3 still apply.
 - In-memory map remains the live working store. NBT is purely persistence (write on save, read on load). Do not read from NBT on every query.
 
-#### What was completed (2026-04-19)
-- `ConversationMemory.getAll(UUID)` and `restoreAll(UUID, Map)` added — used by entity serialization.
-- `AssistantEntity.addAdditionalSaveData()` serializes the full history map to a `CompoundTag` under `dragontweaks:conversation_history`. Each player entry is a `ListTag` of alternating player/NPC lines.
-- `AssistantEntity.readAdditionalSaveData()` deserializes and restores into `ConversationMemory` keyed by entity UUID.
-- `AssistantCommand` required no changes — `ConversationMemory.clearAll()` already called in both delete paths; entity discard naturally removes it from future saves.
-- Pre-check confirmed: `discard()` removes the entity from the world's entity list; it will not be included in the next chunk save. No extra NBT clear step needed.
+*Last updated: Session 10 task written (2026-04-19)*
 
-*Last updated: Session 10 complete (2026-04-19)*
+---
+
+### Session 11 — Follow Behavior
+**Date:** TBD
+
+#### Goal
+Player can ask an AssistantEntity to follow them via natural chat, and ask them to stop via natural chat. Follow behavior enables mobile testing of surroundings awareness and makes NPCs fundamentally more useful than stationary entities.
+
+#### Design decisions
+
+**Trigger mechanism:** Keyword detection in `ChatInterceptor`, evaluated before the Ollama query fires. If a follow/stop intent is detected, the behavior state changes immediately on the game thread. The normal Ollama query still fires and Johnny responds in character — the behavior change and the conversational response are not mutually exclusive.
+
+**Follow keywords:** Delegated to Claude Code. Must feel like natural conversation, not commands. Examples: "follow", "come with", "walk with me", "come along". Claude Code selects the final set — if it feels wrong in practice it will be tuned in a follow-up.
+
+**Stop keywords:** Same delegation. Examples: "stop", "stay", "wait here", "stay put". Claude Code selects.
+
+**Targeting:** If no NPC name is mentioned in the message, the nearest AssistantEntity within range follows/stops. If a name is mentioned, use existing `AssistantCommand.nameMatches()` logic to target the correct entity.
+
+**Follow behavior:**
+- NPC attempts to pathfind to within 3-4 blocks of the player continuously.
+- If the player becomes undetectable (teleport, goes invisible, falls out of range, enters a space the NPC cannot pathfind to) the NPC stops moving and stays put. Does not despawn, does not error.
+- Follow state is in-memory only — lost on server restart or entity removal. No NBT persistence needed.
+
+**Goal implementation:** Add a follow goal to `AssistantEntity` via `registerGoals()`. Pre-check what follow/move-to-player goal classes exist in NeoForge 1.21.1 decompiled sources before writing anything. Do not assume class names from 1.20.x exist. A custom goal extending `Goal` that targets the player and uses the entity's navigator may be required. Verify first.
+
+**State flag:** Add a `boolean following` field to `AssistantEntity` with `setFollowing(boolean)` and `isFollowing()` accessors. The follow goal checks `isFollowing()` on each tick — if false, goal is inactive and entity stays stationary (existing behavior). Persisted to NBT alongside name and role so it survives chunk unload/reload within a session, but intentionally reset to `false` on world load — NPCs always start stationary.
+
+**Removal cleanup:** Follow state is on the entity itself — no separate cleanup needed beyond the existing entity discard on `/assistant remove`.
+
+#### Files to create/modify
+- **Modify:** `AssistantEntity.java` — add `following` boolean field with accessors; add follow goal in `registerGoals()`; write/read `following` to NBT in `addAdditionalSaveData()`/`readAdditionalSaveData()` (reset to false on read — intentional).
+- **Modify:** `ChatInterceptor.java` — add keyword detection before Ollama query; call `entity.setFollowing(true/false)` on detection; still fire Ollama query for natural conversational response.
+- **New (if needed):** Custom follow goal class if no suitable vanilla/NeoForge goal exists in 1.21.1.
+- **No changes** to `OllamaClient`, `ConversationMemory`, `AssistantCommand`, `AssistantRenderer`, `Config`, `ModEntities`.
+
+#### Definition of done
+- `./gradlew build` passes.
+- Validated in-game: say "follow me" to Johnny — he begins pathfinding to within 3-4 blocks and maintains distance as player moves.
+- Validated: say a stop phrase — Johnny stops moving and stays put.
+- Validated: Johnny responds in character to both triggers (not silent, not a system message).
+- Validated: if player teleports away, Johnny stops and stays put rather than erroring.
+- Validated: nearest NPC follows when no name mentioned; named NPC follows when name is included.
+- Validated: follow state does not survive world exit — Johnny is stationary on relaunch.
+
+#### Constraints — do not violate
+- Keyword detection must feel like natural conversation, not slash commands.
+- Follow goal must not block the game thread — goal logic runs on server tick, which is acceptable for pathfinding goals. Ollama query still async.
+- Do not use class names from 1.20.x without verifying they exist in 1.21.1 sources (Concern #2).
+- Hard Architectural Rules 1–3 still apply.
+- `num_predict` stays at 100.
+
+*Last updated: Session 11 task written (2026-04-19)*

@@ -19,6 +19,7 @@ import java.util.Map;
 public class AssistantEntity extends PathfinderMob {
 
     private String role = "villager";
+    private boolean following = false;
 
     public AssistantEntity(EntityType<? extends AssistantEntity> type, Level level) {
         super(type, level);
@@ -30,10 +31,14 @@ public class AssistantEntity extends PathfinderMob {
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
 
+    public boolean isFollowing() { return following; }
+    public void setFollowing(boolean following) { this.following = following; }
+
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         tag.putString("AssistantRole", role);
+        tag.putBoolean("AssistantFollowing", following);
 
         Map<String, Deque<String>> allHistory = ConversationMemory.getAll(this.getUUID());
         if (!allHistory.isEmpty()) {
@@ -55,6 +60,8 @@ public class AssistantEntity extends PathfinderMob {
         if (tag.contains("AssistantRole")) {
             role = tag.getString("AssistantRole");
         }
+        // Intentionally always false on load — NPCs start stationary
+        following = false;
 
         if (tag.contains("dragontweaks:conversation_history", Tag.TAG_COMPOUND)) {
             CompoundTag historyTag = tag.getCompound("dragontweaks:conversation_history");
@@ -73,13 +80,13 @@ public class AssistantEntity extends PathfinderMob {
 
     @Override
     protected void registerGoals() {
-        // Intentionally empty — no wandering, no combat, no targeting
+        this.goalSelector.addGoal(1, new FollowPlayerGoal(this, 1.0, 5.0F, 3.0F));
     }
 
     public static AttributeSupplier createAttributes() {
         return PathfinderMob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, 20.0)
-                .add(Attributes.MOVEMENT_SPEED, 0.0)
+                .add(Attributes.MOVEMENT_SPEED, 0.3)
                 .build();
     }
 }
