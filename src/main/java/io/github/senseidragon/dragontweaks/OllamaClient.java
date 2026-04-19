@@ -71,12 +71,12 @@ public class OllamaClient {
         return "NIGHT";
     }
 
-    static String scanSurroundings(ServerLevel level, AssistantEntity npc) {
+    static Map<String, Boolean> scanSurroundingsRaw(ServerLevel level, AssistantEntity npc) {
         double radius = Config.NPC_AWARENESS_RADIUS.get().doubleValue();
         AABB box = AABB.ofSize(npc.position(), radius * 2, radius * 2, radius * 2);
         String category = Config.NPC_AWARENESS_CATEGORY.get();
 
-        Map<String, Integer> counts = new LinkedHashMap<>();
+        Map<String, Boolean> result = new LinkedHashMap<>();
         for (Entity entity : level.getEntitiesOfClass(Entity.class, box,
                 e -> !(e instanceof AssistantEntity) && !(e instanceof Player) && !(e instanceof ItemEntity))) {
             MobCategory mob = entity.getType().getCategory();
@@ -87,17 +87,16 @@ public class OllamaClient {
                                || mob == MobCategory.WATER_CREATURE || mob == MobCategory.WATER_AMBIENT;
             };
             if (!include) continue;
-            counts.merge(entityDisplayName(entity), 1, Integer::sum);
+            String name = entityDisplayName(entity);
+            result.putIfAbsent(name, mob == MobCategory.MONSTER);
         }
+        return result;
+    }
 
-        if (counts.isEmpty()) return "nothing notable nearby";
-
-        StringBuilder sb = new StringBuilder();
-        counts.forEach((name, count) -> {
-            if (!sb.isEmpty()) sb.append(", ");
-            sb.append(count).append(" ").append(name);
-        });
-        return sb.toString();
+    static String scanSurroundings(ServerLevel level, AssistantEntity npc) {
+        Map<String, Boolean> raw = scanSurroundingsRaw(level, npc);
+        if (raw.isEmpty()) return "nothing notable nearby";
+        return String.join(", ", raw.keySet());
     }
 
     private static String entityDisplayName(Entity entity) {
