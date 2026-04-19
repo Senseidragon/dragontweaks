@@ -19,18 +19,30 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class OllamaClient {
 
-    private static final ExecutorService EXECUTOR =
-        Executors.newSingleThreadExecutor(r -> new Thread(r, "dragontweaks-llm"));
+    private static ExecutorService EXECUTOR = newExecutor();
+    private static HttpClient HTTP = newHttpClient(EXECUTOR);
 
-    private static final HttpClient HTTP = HttpClient.newBuilder()
-        .executor(EXECUTOR)
-        .build();
+    private static ExecutorService newExecutor() {
+        return Executors.newSingleThreadExecutor(r -> new Thread(r, "dragontweaks-llm"));
+    }
+
+    private static HttpClient newHttpClient(ExecutorService exec) {
+        return HttpClient.newBuilder().executor(exec).build();
+    }
+
+    private static void ensureAlive() {
+        if (EXECUTOR.isShutdown()) {
+            EXECUTOR = newExecutor();
+            HTTP = newHttpClient(EXECUTOR);
+        }
+    }
 
     private static final Gson GSON = new Gson();
 
@@ -128,13 +140,47 @@ public class OllamaClient {
         );
     }
 
+    public static void warmup() {
+        ensureAlive();
+        JsonObject obj = new JsonObject();
+        obj.addProperty("model", Config.LLM_MODEL.get());
+        obj.addProperty("prompt", "ping");
+        obj.addProperty("stream", false);
+        obj.addProperty("think", false);
+        JsonObject options = new JsonObject();
+        options.addProperty("num_predict", 1);
+        obj.add("options", options);
+        String body = GSON.toJson(obj);
+
+        HttpRequest request;
+        try {
+            request = HttpRequest.newBuilder()
+                .uri(URI.create(Config.LLM_ENDPOINT.get()))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+        } catch (IllegalArgumentException e) {
+            DragonTweaks.LOGGER.error("[OllamaClient] Warmup skipped — invalid endpoint URI: {}", e.getMessage());
+            return;
+        }
+
+        HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+            .thenAccept(r -> DragonTweaks.LOGGER.info("[OllamaClient] LLM ready"))
+            .exceptionally(e -> {
+                DragonTweaks.LOGGER.warn("[OllamaClient] LLM unreachable — fallbacks will be used ({})", e.getMessage());
+                return null;
+            });
+    }
+
     public static void shutdown() {
         EXECUTOR.shutdownNow();
     }
 
     public static void query(MinecraftServer server, ServerPlayer player,
                              Component entityName, String message, String role,
-                             String timeOfDay, String weather, String surroundings) {
+                             String timeOfDay, String weather, String surroundings,
+                             UUID npcId) {
+        ensureAlive();
         if (!Config.LLM_ENABLED.get()) {
             server.execute(() -> sendFallback(player, entityName));
             return;
@@ -142,7 +188,11 @@ public class OllamaClient {
 
         String npcName = entityName.getString();
         String playerName = player.getGameProfile().getName();
-        String requestBody = buildRequestBody(Config.LLM_MODEL.get(), message, npcName, role, playerName, timeOfDay, weather, surroundings);
+        String history = ConversationMemory.getHistory(npcId, playerName);
+        String prompt = history.isEmpty()
+            ? playerName + " says: " + message
+            : "[Prior conversation:]\n" + history + "\n\n" + playerName + " says: " + message;
+        String requestBody = buildRequestBody(Config.LLM_MODEL.get(), prompt, npcName, role, playerName, timeOfDay, weather, surroundings);
 
         HttpRequest request;
         try {
@@ -161,11 +211,13 @@ public class OllamaClient {
             HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .orTimeout(Config.LLM_TIMEOUT_SECONDS.get(), TimeUnit.SECONDS)
                 .thenApply(response -> parseResponse(response.body()))
-                .thenAccept(reply -> server.execute(() ->
+                .thenAccept(reply -> server.execute(() -> {
                     player.sendSystemMessage(
                         Component.literal("[").append(entityName).append("]: " + reply)
-                    )
-                ))
+                    );
+                    ConversationMemory.addExchange(npcId, playerName,
+                        playerName + ": " + message, npcName + ": " + reply);
+                }))
                 .exceptionally(ex -> {
                     DragonTweaks.LOGGER.warn("[OllamaClient] LLM request failed: {}", ex.getMessage());
                     server.execute(() -> sendFallback(player, entityName));
