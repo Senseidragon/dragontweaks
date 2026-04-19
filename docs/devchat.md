@@ -581,3 +581,13 @@ Note: `FollowPlayerGoal.canContinueToUse()` already checked `entity.isFollowing(
 - `AssistantEntity.java` — `setFollowing(false)` calls `this.getNavigation().stop()` immediately.
 
 *Last updated: Session 14 complete (2026-04-19)*
+
+---
+
+### Note — Model Configurability (2026-04-19)
+
+**Concern raised:** `gemma4:26b` on an RTX 2060 6GB works for 1-2 players but will introduce latency under higher load. Waiting on a 5070 server to come back online. Need to be able to swap models (e.g. `gemma4:26b` ↔ `gemma3:12b`) to evaluate quality/latency tradeoffs without rebuilding the mod.
+
+**Status: Already implemented.** `Config.LLM_MODEL` (`ConfigValue<String>`, default `"gemma4:26b"`) exists in `Config.java`. All three call sites in `OllamaClient` (`buildRequestBody`, `ensureAlive`, and the `query()` dispatch) read from `Config.LLM_MODEL.get()`. No hardcoded model strings remain in the codebase.
+
+**To switch models:** Edit `run/config/dragontweaks-common.toml`, change `llmModel = "gemma4:26b"` to the desired model tag. Change takes effect on the next config reload — no rebuild required.
