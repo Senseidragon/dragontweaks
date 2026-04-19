@@ -437,7 +437,7 @@ No digital litter — both in-memory and on-disk state are explicitly cleared.
 ---
 
 ### Session 11 — Follow Behavior
-**Date:** TBD
+**Date:** 2026-04-19
 
 #### Goal
 Player can ask an AssistantEntity to follow them via natural chat, and ask them to stop via natural chat. Follow behavior enables mobile testing of surroundings awareness and makes NPCs fundamentally more useful than stationary entities.
@@ -446,9 +446,9 @@ Player can ask an AssistantEntity to follow them via natural chat, and ask them 
 
 **Trigger mechanism:** Keyword detection in `ChatInterceptor`, evaluated before the Ollama query fires. If a follow/stop intent is detected, the behavior state changes immediately on the game thread. The normal Ollama query still fires and Johnny responds in character — the behavior change and the conversational response are not mutually exclusive.
 
-**Follow keywords:** Delegated to Claude Code. Must feel like natural conversation, not commands. Examples: "follow", "come with", "walk with me", "come along". Claude Code selects the final set — if it feels wrong in practice it will be tuned in a follow-up.
+**Follow keywords:** "follow", "come with", "walk with me", "come along", "come here", "follow me"
 
-**Stop keywords:** Same delegation. Examples: "stop", "stay", "wait here", "stay put". Claude Code selects.
+**Stop keywords:** "stop", "stay", "wait here", "stay put", "stand still", "wait for me"
 
 **Targeting:** If no NPC name is mentioned in the message, the nearest AssistantEntity within range follows/stops. If a name is mentioned, use existing `AssistantCommand.nameMatches()` logic to target the correct entity.
 
@@ -485,4 +485,11 @@ Player can ask an AssistantEntity to follow them via natural chat, and ask them 
 - Hard Architectural Rules 1–3 still apply.
 - `num_predict` stays at 100.
 
-*Last updated: Session 11 task written (2026-04-19)*
+#### What was completed (2026-04-19)
+- **Step A:** `following` boolean field + `isFollowing()`/`setFollowing()` added to `AssistantEntity`. Written to NBT on save; intentionally reset to `false` on load — NPCs always start stationary. `MOVEMENT_SPEED` bumped from `0.0` to `0.3` (required for navigator to move).
+- **Step B:** `FollowPlayerGoal.java` — custom `Goal` (no suitable vanilla goal exists for `PathfinderMob` → `Player`). Checks `isFollowing()` each tick. Pathfinds to within 3 blocks, recalculates every 10 ticks, stops navigator cleanly if player unreachable. Validated in-game.
+- **Step C:** `/assistant follow [name]` and `/assistant stop [name]` added to `AssistantCommand`. Name argument optional — falls back to nearest NPC within 64 blocks if omitted.
+- **Step D:** Keyword detection added to `ChatInterceptor` before Ollama query fires. Follow/stop state changes immediately on game thread; Ollama query still fires for in-character response.
+- **Bug fix:** Chat tokens were not stripped of punctuation before `nameMatches()`. "freddy," failed to match "Freddy Follower". Fixed by stripping non-alphanumeric characters from each token before matching — both NPCs now respond to "freddy, this is millie".
+
+*Last updated: Session 11 complete (2026-04-19)*
