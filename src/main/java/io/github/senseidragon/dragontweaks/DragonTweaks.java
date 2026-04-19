@@ -24,6 +24,7 @@ public class DragonTweaks {
         modEventBus.addListener(ModEntities::onAttributeCreate);
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
         NeoForge.EVENT_BUS.addListener(ChatInterceptor::onServerChat);
+        NeoForge.EVENT_BUS.addListener(ObservationTicker::onServerTick);
         NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> OllamaClient.warmup());
         NeoForge.EVENT_BUS.addListener((ServerStoppingEvent e) -> OllamaClient.shutdown());
     }

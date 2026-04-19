@@ -83,6 +83,7 @@ public class AssistantCommand {
             );
             for (AssistantEntity entity : entities) {
                 ConversationMemory.clearAll(entity.getUUID());
+                ObservationTicker.clearState(entity.getUUID());
                 entity.discard();
                 count++;
             }
@@ -123,6 +124,7 @@ public class AssistantCommand {
         }
 
         ConversationMemory.clearAll(nearest.getUUID());
+        ObservationTicker.clearState(nearest.getUUID());
         nearest.discard();
         ctx.getSource().sendSuccess(() -> Component.literal(name + " removed."), false);
         return 1;
