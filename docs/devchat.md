@@ -75,8 +75,10 @@ All success criteria met and validated in-game:
 - NPC identity, player name, role, and Minecraft world awareness all functioning ✓
 
 ### Remaining cleanup tasks before Phase 1 code begins
-- **Prompt refinement:** "You are aware of your surroundings but only mention them when it feels natural." already added to validated prompt shape above. Ensure `buildSystemPrompt()` matches exactly.
-- **Remove command partial name match:** `/assistant remove` currently does exact name match. "Jack" fails to match "Jack Dawson". Fix to support partial/case-insensitive name matching, or show a clear usage error stating full name is required.
+~~**Prompt refinement:** Completed in Session 6. `buildSystemPrompt()` matches validated shape exactly.~~
+~~**Remove command partial name match:** Completed in Session 6. `nameMatches()` helper handles partial/case-insensitive matching.~~
+
+All cleanup tasks complete. Phase 1 may begin.
 
 ---
 
@@ -159,11 +161,25 @@ All success criteria met and validated in-game:
 
 ---
 
+## MineColonies API Reference Documents
+
+| Document | What it covers |
+|---|---|
+| `docs/MinecoloniesAPI-summary.txt` | **Primary API reference.** Entry point, colony manager, citizens, buildings, permissions, events, registries, recipe/request system, building inventories, warehouse inventory, food store query. Decompiled from `minecolonies-1.0.180-ALPHA-api.jar`. |
+| `docs/minecolonies_wiki.md` | Gameplay mechanics reference — building tiers, citizen behaviors, colony management. Not API-focused; useful for understanding what data is meaningful. |
+| `docs/MinecoloniesWiki/` | Raw wiki source (git submodule from ldtteam/MinecoloniesWiki). Do not edit. |
+
+---
+
 ## Open Questions (from design doc)
-- Does MineColonies fire a public `CitizenJobAssignedEvent`?
-- Are citizen happiness values queryable via public API?
-- Are colony food stores queryable?
-- Are building registry and citizen assignments queryable?
+
+**Answered (2026-04-19):**
+- ~~Does MineColonies fire a public `CitizenJobAssignedEvent`?~~ → **Yes:** `CitizenJobChangedModEvent` via `api.getEventBus().subscribe()`
+- ~~Are citizen happiness values queryable via public API?~~ → **Yes:** `ICitizenData.getCitizenHappinessHandler()`
+- ~~Are colony food stores queryable?~~ → **Partial:** No dedicated method. Iterate warehouse via `getMatchingItemStacksInWarehouse(stack -> stack.getItem().getFoodProperties() != null)`
+- ~~Are building registry and citizen assignments queryable?~~ → **Yes:** `colony.getServerBuildingManager().getBuilding(pos)`, `building.getAllAssignedCitizen()`, `building.getHandlers()` for inventory
+
+**Still open:**
 - Right proximity threshold for command detection (suggest 8-10 blocks as start)
 - Should role slots be expandable via a new building (Steward's Office concept)?
 - What happens to role if citizen dies (not job assignment)?
@@ -174,4 +190,194 @@ All success criteria met and validated in-game:
 
 ---
 
-*Last updated: Session 4 — PoC Complete, Phase 1 begins (2026-04-18)*
+---
+
+### Session 5 — Multi-NPC Addressing
+**Date:** 2026-04-18
+
+#### Decision — Multi-NPC response behavior
+- If a player message contains the name of one or more AssistantEntities within range, **all named entities respond independently** with their own async query.
+- If no entity name is mentioned, **nearest entity responds** (current behavior).
+- Name matching must be **case-insensitive and partial** — "jack" matches "Jack Dawson".
+- Multiple async queries fire independently. Responses arrive in LLM return order — acceptable and natural.
+- AssistantEntities do **not** need explicit awareness of other AssistantEntities. They respond because they were addressed, not because they sense each other.
+
+#### Task for Claude Code — ChatInterceptor multi-NPC update
+- Replace single nearest-entity logic with two-pass scan:
+  1. Collect all AssistantEntities within range.
+  2. Check each entity's name (case-insensitive, partial) against the raw message.
+  3. If any name matches, fire async query for each matched entity.
+  4. If no name matches, fall back to nearest-entity behavior.
+- Name extraction: use `entity.getCustomName().getString()` — check if any word/token of that name appears in the lowercased message.
+- Each matched entity fires its own independent `OllamaClient.query()` call. No coordination between them.
+
+*Last updated: Session 5 — Multi-NPC Addressing (2026-04-18)*
+
+---
+
+### Session 6 — PoC Cleanup (Final Session Before Phase 1)
+**Date:** TBD
+
+#### Scope — three tasks, one session, in this order
+
+**Task 1: Verify prompt matches validated shape**
+- Open `OllamaClient.java`, find `buildSystemPrompt()`.
+- Confirm it matches the validated system prompt shape in the LLM Configuration section above exactly, including the line "You are aware of your surroundings but only mention them when it feels natural."
+- If it matches, no change needed. If it differs, update it to match. Do not improvise.
+
+**Task 2: Fix remove command partial name match**
+- `/assistant remove <name>` currently does exact name match. "Jack" fails to remove "Jack Dawson".
+- Fix to case-insensitive partial match: entity name contains the provided token, or provided token contains entity name.
+- Same matching logic that will be used in Task 3 — extract it into a shared private helper method `nameMatches(String entityName, String token)` so it is only written once.
+
+**Task 3: Multi-NPC addressing in ChatInterceptor**
+- Replace single nearest-entity logic with two-pass scan as documented in Session 5 above.
+- Use the `nameMatches()` helper from Task 2.
+- If any entity name matches: fire async query for each matched entity independently.
+- If no name matches: fall back to nearest entity (current behavior).
+
+#### Definition of done
+All three tasks complete, `./gradlew build` passes, validated in-game:
+- Prompt naturalness confirmed (no forced weather reference in every response)
+- `/assistant remove Jack` successfully removes "Jack Dawson"
+- Saying "Hi Jack and Hega" within range of both triggers both responses independently
+
+#### What was completed (2026-04-18)
+- **Task 1:** `buildSystemPrompt()` in `OllamaClient.java` confirmed to match validated shape exactly, including "You are aware of your surroundings but only mention them when it feels natural." No change needed.
+- **Task 2:** `AssistantCommand.nameMatches(String entityName, String token)` static helper added — case-insensitive, partial in either direction. `/assistant remove Jack` now removes "Jack Dawson".
+- **Task 3:** `ChatInterceptor` two-pass scan implemented. Named entities within range each fire an independent async query. Falls back to nearest if no name mentioned. Uses `AssistantCommand.nameMatches()`.
+
+*Last updated: Session 6 — PoC cleanup complete (2026-04-18)*
+
+---
+
+### Session 7 — NPC Surroundings Awareness
+**Date:** 2026-04-18
+
+#### What was built
+- **`Config.java`** — Two new config values:
+  - `NPC_AWARENESS_RADIUS` (`IntValue`, default 16, range 4–64): radius in blocks around each NPC for entity scanning.
+  - `NPC_AWARENESS_CATEGORY` (`ConfigValue<String>`, default `"PASSIVE"`, valid: `"PASSIVE"` / `"HOSTILE"` / `"ALL"`): which mob categories the NPC perceives.
+- **`OllamaClient.scanSurroundings(ServerLevel, AssistantEntity)`** — Queries entities within an AABB of `NPC_AWARENESS_RADIUS` centered on the NPC. Excludes `AssistantEntity`, `Player`, and `ItemEntity`. Filters by `NPC_AWARENESS_CATEGORY`. Groups remaining entities by display name (derived from `getType().getDescriptionId()`, e.g. `"entity.minecraft.pig"` → `"pig"`), counts them, returns a formatted string like `"2 pig, 1 cow"` or `"nothing notable nearby"`.
+- **`OllamaClient.buildSystemPrompt()`** — Now takes a `surroundings` parameter. Injects `"Nearby you can see: {surroundings}."` as a new line in the system prompt, after the time/weather line.
+- **`OllamaClient.query()`** — Signature extended to accept `surroundings` string, passed through to `buildRequestBody()` and `buildSystemPrompt()`.
+- **`ChatInterceptor`** — Calls `OllamaClient.scanSurroundings(serverLevel, target)` once per target NPC immediately before firing the async query.
+
+#### Fix applied
+`NPC_AWARENESS_RADIUS` initially defined as `DoubleValue` (`defineInRange` with double bounds). NeoForge config threw a validation error at load. Corrected to `IntValue` (`defineInRange` with int bounds) and `Config.NPC_AWARENESS_RADIUS.get().doubleValue()` used at the call site.
+
+#### Design notes
+- Scan runs on the game thread (inside `ChatInterceptor.onServerChat()`), synchronously, before the async query fires. This is intentional — the scan result must be captured at the moment of conversation, not later.
+- NPCs do not perceive other `AssistantEntity` instances or players — excluded from scan by design.
+- Surroundings are injected into the system prompt, not the user prompt, so the model can weave them naturally into character voice rather than feeling obligated to address them.
+
+*Last updated: Session 7 — NPC surroundings awareness complete (2026-04-18)*
+
+---
+
+### Session 8 — MineColonies API Research
+**Date:** 2026-04-19
+
+#### What was researched
+Decompiled `minecolonies-1.0.180-ALPHA-api.jar` from the Gradle cache to verify what the public API actually exposes. Key findings added to `docs/MinecoloniesAPI-summary.txt`.
+
+#### Building inventories
+- `IBuilding.getHandlers()` returns `List<IItemHandler>` — full Forge inventory access for any building.
+- Building tile entities extend `TileEntityRack`, exposing `getAllContent()`, `hasItemStack()`, `getCount()`, `getFreeSlots()`.
+- `IBuilding.forceTransferStack(ItemStack, World)` allows inserting items into any building.
+- Applies to all worker buildings: Builder's Hut, Mine, Sawmill, Farm, etc.
+
+#### Warehouse inventory
+- `IWareHouse` extends `IBuilding` — all building methods apply.
+- `AbstractTileEntityWareHouse` adds warehouse-wide query methods spanning all linked racks:
+  - `hasMatchingItemStackInWarehouse(Predicate, int)` — presence check
+  - `getMatchingItemStacksInWarehouse(Predicate)` → `List<Tuple<ItemStack, BlockPos>>` — items + locations
+- No external write path into the warehouse. `dumpInventoryIntoWareHouse()` requires `InventoryCitizen`.
+
+#### Food stores
+No dedicated food query. Must use: `te.getMatchingItemStacksInWarehouse(s -> s.getItem().getFoodProperties() != null)`.
+
+#### Open questions resolved
+`CitizenJobChangedModEvent` confirmed public. Happiness via `getCitizenHappinessHandler()` confirmed. Building/citizen assignment queries confirmed.
+
+*Last updated: Session 8 — MineColonies API research (2026-04-19)*
+
+---
+
+### Session 9 — Persistent NPC Memory
+**Date:** TBD
+
+#### Goal
+Each AssistantEntity remembers recent conversation history with each player. History is injected into the Ollama prompt so the NPC can reference prior exchanges naturally. No MineColonies dependency. Fully testable in superflat testbed.
+
+#### Architecture context — OllamaClient is static
+`OllamaClient` is a static utility class — no constructor, no instance. The executor, HTTP client, and Gson are all static fields initialized at classload. This is correct for shared infrastructure (one thread pool across all NPCs is intentional). Do NOT refactor OllamaClient to be per-instance. Memory is handled separately via a static `ConversationMemory` class keyed by NPC UUID.
+
+#### Design decisions
+
+**Storage:** Static `ConversationMemory` class holding `Map<UUID, Map<String, Deque<String>>>`. Outer key is NPC entity UUID. Inner key is player name (lowercase). Values are deques of alternating exchange lines. No NBT persistence — history lost on server restart. Acceptable at this stage.
+
+**Why UUID not NPC name:** Names can collide (two NPCs named "Jack"). UUID is guaranteed unique per entity instance.
+
+**History format:** Each exchange is stored as two lines — player line then NPC line:
+```
+Senseidragon: How are the crops?
+Hega: The rye is coming in well, though I worry about rain tonight.
+Senseidragon: Should I bring extra torches?
+Hega: It wouldn't hurt — the path to the mill gets dark quickly.
+```
+
+**Injection point:** History is injected into the **user prompt** (not the system prompt), immediately before the current player message. System prompt remains character/role/world definition only.
+
+**History cap:** Last **10 exchanges** (10 player lines + 10 NPC lines = 20 lines total) per player per NPC. Oldest pair dropped from front of deque when cap exceeded.
+
+**Threading:** History read on game thread before async query fires. History written on game thread after response is queued back. No concurrent access, no locking needed.
+
+#### ConversationMemory API
+```java
+// Static utility class — no instances
+ConversationMemory.addExchange(UUID npcId, String playerName, String playerLine, String npcLine)
+ConversationMemory.getHistory(UUID npcId, String playerName) → String  // empty string if none
+ConversationMemory.clear(UUID npcId, String playerName)                // for testing/future use
+ConversationMemory.clearAll(UUID npcId)                                // on NPC removal
+```
+
+#### User prompt shape with history
+```
+[Prior conversation:]
+Senseidragon: How are the crops?
+Hega: The rye is coming in well, though I worry about rain tonight.
+
+Senseidragon says: What's the weather like today?
+```
+If no history exists for this player+NPC pair yet, omit the `[Prior conversation:]` block entirely — do not inject an empty block.
+
+#### Files to create/modify
+- **New:** `ConversationMemory.java` — static utility class as described above.
+- **Modify:** `OllamaClient.java` — update `query()` to accept NPC UUID and player name; prepend history in user prompt construction; call `ConversationMemory.addExchange()` after response is sent back to game thread.
+- **Modify:** `ChatInterceptor.java` — pass NPC UUID (from `AssistantEntity`) and player name through to `OllamaClient.query()`. Player name already available via event; UUID via `entity.getUUID()`.
+- **Modify:** `AssistantCommand.java` — call `ConversationMemory.clearAll(npcId)` when an NPC is removed via `/assistant remove`, so stale history doesn't accumulate.
+- **No changes** to `AssistantEntity`, `AssistantRenderer`, `Config`, `ModEntities`.
+
+#### Definition of done
+- `./gradlew build` passes.
+- Validated in-game: tell an NPC your name or a detail, end the conversation, start a new one — NPC references the earlier exchange without being re-prompted.
+- Validated: two different players maintain independent histories with the same NPC.
+- Validated: Jack's memory of Senseidragon is separate from Hega's memory of Senseidragon.
+- Validated: `/assistant remove Jack` clears Jack's history map entirely.
+
+#### What was completed (2026-04-19)
+- **`ConversationMemory.java`** — Static utility class. `Map<UUID, Map<String, Deque<String>>>`. 10-exchange cap per player per NPC. Keys by NPC UUID (not name) and lowercase player name.
+- **`OllamaClient.query()`** — Signature extended with `UUID npcId`. History injected into user prompt as `[Prior conversation:]` block if present. `ConversationMemory.addExchange()` called on game thread after response delivered.
+- **`ChatInterceptor`** — Passes `target.getUUID()` to `query()`.
+- **`AssistantCommand`** — Calls `ConversationMemory.clearAll()` on both `deleteNearest` and `deleteAll`.
+- **Executor resurrection fix** — `EXECUTOR` and `HTTP` changed from `final` to mutable. `ensureAlive()` recreates both if executor was shut down between world loads. Called at top of `query()`.
+- **LLM warmup** — `OllamaClient.warmup()` fires on `ServerStartedEvent`. Sends `num_predict:1`, `think:false`, `stream:false` — same code path as real queries. Logs `LLM ready` or `LLM unreachable`. Pre-loads model layers before first player interaction.
+
+#### Constraints — do not violate
+- **Do not refactor OllamaClient to per-instance.** Static is correct. Memory lives in ConversationMemory, not OllamaClient.
+- **In-memory only.** No NBT persistence this session.
+- **`num_predict` stays at 100.** History injection lengthens the prompt; response cap does not change.
+- **Hard Architectural Rules 1–3 still apply.** History read/write on game thread; Ollama HTTP on async thread; responses queued back to game thread before any chat output.
+
+*Last updated: Session 9 complete (2026-04-19)*

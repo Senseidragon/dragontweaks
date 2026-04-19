@@ -187,7 +187,65 @@
   );
 
   ---
+  Building Inventories
+
+  Every IBuilding exposes its inventory via Forge's IItemHandler capability. The building tile entity
+  (AbstractTileEntityColonyBuilding) extends TileEntityRack, so all rack methods are available.
+
+  // Get all item handlers for a building (covers the main chest + all linked containers)
+  List<IItemHandler> handlers = building.getHandlers();
+
+  // Or directly via the tile entity:
+  AbstractTileEntityColonyBuilding te = building.getTileEntity();
+  Map<ItemStorage, Integer> contents = te.getAllContent();         // full snapshot
+  boolean has  = te.hasItemStack(stack, count, fuzzy);
+  int     qty  = te.getCount(stack, fuzzy, nbt);
+  int     free = te.getFreeSlots();
+  BlockPos chest = te.getPositionOfChestWithItemStack(pred);      // which chest holds it
+
+  // Force-insert an item into a building:
+  building.forceTransferStack(itemStack, world);
+
+  These methods work on ALL worker buildings: Builder's Hut, Mine, Sawmill, Farm, etc.
+
+  ---
+  Warehouse Inventory
+
+  IWareHouse extends IBuilding, so everything above applies. Additionally, AbstractTileEntityWareHouse
+  provides warehouse-wide query methods that span all linked racks:
+
+  IWareHouse wh = (IWareHouse) colony.getServerBuildingManager().getBuilding(warehousePos);
+  AbstractTileEntityWareHouse te = wh.getTileEntity();
+
+  // Check presence (multiple overloads for fuzzy/NBT/damage matching):
+  te.hasMatchingItemStackInWarehouse(Predicate<ItemStack> pred, int minCount);
+  te.hasMatchingItemStackInWarehouse(ItemStack stack, int count, boolean fuzzy);
+  te.hasMatchingItemStackInWarehouse(ItemStack stack, int count, boolean fuzzy, int damage);
+  te.hasMatchingItemStackInWarehouse(ItemStack stack, int count, boolean fuzzy, boolean ignoreNBT, int damage);
+
+  // Get matching stacks + their BlockPos locations across all racks:
+  List<Tuple<ItemStack, BlockPos>> found =
+      te.getMatchingItemStacksInWarehouse(Predicate<ItemStack> pred);
+
+  // Internal use only — not useful to external mods:
+  te.dumpInventoryIntoWareHouse(InventoryCitizen);   // requires InventoryCitizen, no external path
+
+  // No direct write path into the warehouse from external code.
+  // Use building.forceTransferStack() if you need to insert into a specific building.
+
+  ---
+  Food Store Query
+
+  There is NO dedicated food-query API. To check colony food stores, iterate warehouse contents
+  and filter by isEdible():
+
+  te.getMatchingItemStacksInWarehouse(stack -> stack.getItem().getFoodProperties() != null);
+
+  ---
   Side note on server vs. client: IColony is server-side (mutable). On the client you get IColonyView instead — mostly read-only. The colony
   manager returns the appropriate type automatically depending on which logical side you're on.
 
-✻ Churned for 2m 25s                 
+  ---
+  Source: Decompiled from minecolonies-1.0.180-ALPHA-api.jar (2026-04-19)
+  Interfaces verified: IBuilding, IBuildingContainer, IWareHouse, AbstractTileEntityWareHouse,
+  AbstractTileEntityColonyBuilding, TileEntityRack                 

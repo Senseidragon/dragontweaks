@@ -70,6 +70,7 @@ public class AssistantCommand {
                 AssistantEntity.class, new AABB(-3e7, -3e7, -3e7, 3e7, 3e7, 3e7)
             );
             for (AssistantEntity entity : entities) {
+                ConversationMemory.clearAll(entity.getUUID());
                 entity.discard();
                 count++;
             }
@@ -109,6 +110,7 @@ public class AssistantCommand {
             return 0;
         }
 
+        ConversationMemory.clearAll(nearest.getUUID());
         nearest.discard();
         ctx.getSource().sendSuccess(() -> Component.literal(name + " removed."), false);
         return 1;
