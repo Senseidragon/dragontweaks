@@ -32,7 +32,10 @@ public class AssistantEntity extends PathfinderMob {
     public void setRole(String role) { this.role = role; }
 
     public boolean isFollowing() { return following; }
-    public void setFollowing(boolean following) { this.following = following; }
+    public void setFollowing(boolean following) {
+        this.following = following;
+        if (!following) this.getNavigation().stop();
+    }
 
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {

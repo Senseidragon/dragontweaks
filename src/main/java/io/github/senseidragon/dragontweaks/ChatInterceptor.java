@@ -61,7 +61,8 @@ public class ChatInterceptor {
         if (isFollowIntent) {
             for (AssistantEntity target : targets) target.setFollowing(true);
         } else if (isStopIntent) {
-            for (AssistantEntity target : targets) target.setFollowing(false);
+            List<AssistantEntity> stopTargets = matched.isEmpty() ? candidates : matched;
+            for (AssistantEntity target : stopTargets) target.setFollowing(false);
         }
         player.sendSystemMessage(
                 Component.literal("<" + player.getGameProfile().getName() + "> " + rawMessage)
