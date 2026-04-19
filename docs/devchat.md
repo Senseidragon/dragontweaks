@@ -530,3 +530,54 @@ Make NPC roles feel real by injecting a role-specific persona block (domain know
 - `"villager"` (unrecognized) produces generic response with no errors.
 
 *Last updated: Session 12 complete (2026-04-19)*
+
+---
+
+### Session 13 — Proactive NPC Observations
+**Date:** 2026-04-19
+
+#### Goal
+NPCs proactively comment when new mobs appear in their surroundings, without being spoken to first. Tick-driven awareness loop, independent of player chat.
+
+#### Architecture
+- `ObservationTicker` registered on `ServerTickEvent.Post`. Runs every 100 ticks, diffs current scan results against per-NPC `lastSeen` sets. When a new hostile or passive entity type appears and the per-NPC cooldown has elapsed, fires `OllamaClient.observe()`.
+- `OllamaClient.scanSurroundingsRaw()` — structured scan returning `Map<String, Integer>` (entity type → count). Extracted from `scanSurroundings()`, which now wraps it.
+- `OllamaClient.observe()` — proactive prompt path. Builds a short observation prompt; broadcasts response to nearest player within `COMMAND_PROXIMITY` who has an existing `ConversationMemory` entry for the NPC.
+- Broadcast target selection: nearest player within range who has history with the NPC. If no such player exists, observation is silently dropped.
+
+#### Config values added
+- `NPC_OBSERVATIONS_ENABLED` (BooleanValue, default `true`)
+- `NPC_OBSERVATION_HOSTILE_COOLDOWN_SECONDS` (IntValue, default 15, range 5–300)
+- `NPC_OBSERVATION_PASSIVE_COOLDOWN_SECONDS` (IntValue, default 60, range 15–600)
+
+#### Files created/modified
+- **New:** `ObservationTicker.java` — tick handler, per-NPC `lastSeen` maps, per-NPC cooldown tracking, diff + fire logic.
+- **Modify:** `OllamaClient.java` — extracted `scanSurroundingsRaw()`; `scanSurroundings()` now wraps it; added `observe()`.
+- **Modify:** `DragonTweaks.java` — registered `ObservationTicker::onServerTick` on the NeoForge event bus.
+- **Modify:** `AssistantCommand.java` — `deleteAll` and `deleteNearest` call `ObservationTicker.clearState(uuid)` on NPC removal.
+- **Modify:** `Config.java` — three new proactive observation config entries.
+
+*Last updated: Session 13 complete (2026-04-19)*
+
+---
+
+### Session 14 — Follow/Stop Bug Fixes
+**Date:** 2026-04-19
+
+#### Bug 1 — Stop intent with no name only stopped nearest NPC
+`ChatInterceptor` stop-intent path used `targets` (which fell back to `List.of(nearest)` when `matched` was empty) rather than all candidates in range. When multiple NPCs were following, only the nearest stopped.
+
+**Fix:** When `isStopIntent` is true, the stop list is `candidates` if `matched` is empty, otherwise `matched`. Follow intent continues to use `targets` (nearest fallback) unchanged.
+
+#### Bug 2 — NPC kept walking briefly after stop intent
+`setFollowing(false)` set the flag but left the navigator running. The goal would eventually terminate on the next tick check, but the NPC visually walked a step or two further.
+
+**Fix:** `AssistantEntity.setFollowing(boolean)` now calls `this.getNavigation().stop()` immediately when the value is set to `false`. The navigator halts at the moment of the flag change, not on the next goal tick.
+
+Note: `FollowPlayerGoal.canContinueToUse()` already checked `entity.isFollowing()` as its first condition — no change needed there.
+
+#### Files modified
+- `ChatInterceptor.java` — stop intent uses `candidates` (all in range) when no name matched.
+- `AssistantEntity.java` — `setFollowing(false)` calls `this.getNavigation().stop()` immediately.
+
+*Last updated: Session 14 complete (2026-04-19)*
