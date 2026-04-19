@@ -23,6 +23,18 @@ public class Config {
             .define("npcAwarenessCategory", "PASSIVE",
                     o -> o instanceof String s && (s.equals("PASSIVE") || s.equals("HOSTILE") || s.equals("ALL")));
 
+    public static final ModConfigSpec.BooleanValue NPC_OBSERVATIONS_ENABLED = BUILDER
+            .comment("Enable proactive NPC observations — NPCs comment when new entities appear nearby")
+            .define("npcObservationsEnabled", true);
+
+    public static final ModConfigSpec.IntValue NPC_OBSERVATION_HOSTILE_COOLDOWN_SECONDS = BUILDER
+            .comment("Minimum seconds between hostile-entity observations per NPC")
+            .defineInRange("npcObservationHostileCooldownSeconds", 15, 5, 300);
+
+    public static final ModConfigSpec.IntValue NPC_OBSERVATION_PASSIVE_COOLDOWN_SECONDS = BUILDER
+            .comment("Minimum seconds between passive-entity observations per NPC")
+            .defineInRange("npcObservationPassiveCooldownSeconds", 60, 15, 600);
+
     public static final ModConfigSpec.BooleanValue LLM_ENABLED = BUILDER
             .comment("Enable LLM-backed responses via Ollama. If false, all responses use template fallbacks")
             .define("llmEnabled", true);
