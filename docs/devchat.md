@@ -216,7 +216,7 @@ All cleanup tasks complete. Phase 1 may begin.
 ---
 
 ### Session 6 — PoC Cleanup (Final Session Before Phase 1)
-**Date:** TBD
+**Date:** 2026-04-18
 
 #### Scope — three tasks, one session, in this order
 
@@ -305,7 +305,7 @@ No dedicated food query. Must use: `te.getMatchingItemStacksInWarehouse(s -> s.g
 ---
 
 ### Session 9 — Persistent NPC Memory
-**Date:** TBD
+**Date:** 2026-04-19
 
 #### Goal
 Each AssistantEntity remembers recent conversation history with each player. History is injected into the Ollama prompt so the NPC can reference prior exchanges naturally. No MineColonies dependency. Fully testable in superflat testbed.
@@ -372,12 +372,12 @@ If no history exists for this player+NPC pair yet, omit the `[Prior conversation
 - **`num_predict` stays at 100.** History injection lengthens the prompt; response cap does not change.
 - **Hard Architectural Rules 1–3 still apply.** History read/write on game thread; Ollama HTTP on async thread; responses queued back to game thread before any chat output.
 
-*Last updated: Session 9 task written (2026-04-19)*
+*Last updated: Session 11 complete (2026-04-19)*
 
 ---
 
 ### Session 10 — NBT Persistence for Conversation Memory
-**Date:** TBD
+**Date:** 2026-04-19
 
 #### Goal
 Conversation history survives full game exit and JVM restart. History is written to NBT on the `AssistantEntity` itself and read back on entity load. No new dependencies. Fully testable in superflat testbed by exiting to desktop and relaunching.
@@ -432,7 +432,7 @@ No digital litter — both in-memory and on-disk state are explicitly cleared.
 - Hard Architectural Rules 1–3 still apply.
 - In-memory map remains the live working store. NBT is purely persistence (write on save, read on load). Do not read from NBT on every query.
 
-*Last updated: Session 10 task written (2026-04-19)*
+*Last updated: Session 10 complete (2026-04-19)*
 
 ---
 
@@ -493,3 +493,40 @@ Player can ask an AssistantEntity to follow them via natural chat, and ask them 
 - **Bug fix:** Chat tokens were not stripped of punctuation before `nameMatches()`. "freddy," failed to match "Freddy Follower". Fixed by stripping non-alphanumeric characters from each token before matching — both NPCs now respond to "freddy, this is millie".
 
 *Last updated: Session 11 complete (2026-04-19)*
+
+---
+
+### Session 12 — Role-Differentiated Prompts
+**Date:** 2026-04-19
+
+#### Goal
+Make NPC roles feel real by injecting a role-specific persona block (domain knowledge + personality) into the LLM system prompt. Roles were previously just a word in the opening line — a Ranch Hand and a Scout sounded identical.
+
+#### Design decisions
+
+**Approach:** Hardcoded keyword→persona map in a new `RolePersona` static utility class. Matching is case-insensitive keyword containment (`role.toLowerCase().contains(keyword)`), so `"Head Ranch Hand"` matches `"ranch hand"`. Unrecognized roles return an empty string — existing generic prompt unchanged.
+
+**Injection point:** Immediately after the opening line (`"You are X, a Y in a medieval village."`), before the world description. Omitted entirely when empty — no blank lines for unrecognized roles.
+
+**Persona content:** Each entry combines domain knowledge (what the NPC knows and cares about) with personality/speech flavor (how they talk). Both are needed — domain alone produces a knowledgeable generic NPC; personality alone produces a flavored generic NPC.
+
+#### Initial role table
+
+| Keyword | Domain + personality |
+|---|---|
+| `ranch hand` | Livestock focus (cattle, sheep, chickens), knows animal health/predator signs/feed levels. Plain speech, no patience for distractions. |
+| `planner` | Building queue and resource allocation. Always mentally tracking priorities. Practical speech, quietly frustrated by disruptions. |
+| `scout` | Terrain mapping and threat detection. Notices subtle signs. Clipped, alert sentences, rarely wastes words. |
+| `advisor` | Colony strategy and diplomacy. Careful word choice, thinks several moves ahead. *(Placeholder — full persona pending MineColonies integration.)* |
+
+#### Files created/modified
+- **New:** `RolePersona.java` — static utility, `LinkedHashMap<String, String>` keyword→persona, `getPersonaBlock(String role)` public method.
+- **Modify:** `OllamaClient.buildSystemPrompt()` — two-line change: call `RolePersona.getPersonaBlock(role)`, conditionally prepend to world description.
+
+#### Definition of done
+- `./gradlew build` passes. ✓
+- In-game: Ranch Hand and Scout give distinctly different responses to "what do you do all day?"
+- `"Head Ranch Hand"` keyword-matches and gets Ranch Hand persona.
+- `"villager"` (unrecognized) produces generic response with no errors.
+
+*Last updated: Session 12 complete (2026-04-19)*
