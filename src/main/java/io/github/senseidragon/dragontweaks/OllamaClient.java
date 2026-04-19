@@ -177,6 +177,55 @@ public class OllamaClient {
         EXECUTOR.shutdownNow();
     }
 
+    public static void observe(MinecraftServer server, ServerPlayer player, Component entityName,
+                               String role, String timeOfDay, String weather, String surroundings,
+                               String whatChanged) {
+        ensureAlive();
+        if (!Config.LLM_ENABLED.get()) return;
+
+        String npcName = entityName.getString();
+        String playerName = player.getGameProfile().getName();
+        String systemPrompt = buildSystemPrompt(npcName, role, playerName, timeOfDay, weather, surroundings);
+        String prompt = "You just noticed: " + whatChanged +
+                        ". React in character in 1-2 short sentences. Address " + playerName + " directly.";
+
+        JsonObject obj = new JsonObject();
+        obj.addProperty("model", Config.LLM_MODEL.get());
+        obj.addProperty("system", systemPrompt);
+        obj.addProperty("prompt", prompt);
+        obj.addProperty("stream", false);
+        obj.addProperty("think", false);
+        JsonObject options = new JsonObject();
+        options.addProperty("num_predict", 100);
+        obj.add("options", options);
+        String requestBody = GSON.toJson(obj);
+
+        HttpRequest request;
+        try {
+            request = HttpRequest.newBuilder()
+                .uri(URI.create(Config.LLM_ENDPOINT.get()))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .build();
+        } catch (IllegalArgumentException e) {
+            DragonTweaks.LOGGER.error("[OllamaClient] observe() — invalid endpoint URI: {}", e.getMessage());
+            return;
+        }
+
+        HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+            .orTimeout(Config.LLM_TIMEOUT_SECONDS.get(), TimeUnit.SECONDS)
+            .thenApply(response -> parseResponse(response.body()))
+            .thenAccept(reply -> server.execute(() ->
+                player.sendSystemMessage(
+                    Component.literal("[").append(entityName).append("]: " + reply)
+                )
+            ))
+            .exceptionally(ex -> {
+                DragonTweaks.LOGGER.warn("[OllamaClient] observe() failed: {}", ex.getMessage());
+                return null;
+            });
+    }
+
     public static void query(MinecraftServer server, ServerPlayer player,
                              Component entityName, String message, String role,
                              String timeOfDay, String weather, String surroundings,
