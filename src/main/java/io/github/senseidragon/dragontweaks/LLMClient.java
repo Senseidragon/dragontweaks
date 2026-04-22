@@ -1,6 +1,7 @@
 package io.github.senseidragon.dragontweaks;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.network.chat.Component;
@@ -24,7 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-public class OllamaClient {
+public class LLMClient {
 
     private static ExecutorService EXECUTOR = newExecutor();
     private static HttpClient HTTP = newHttpClient(EXECUTOR);
@@ -113,24 +114,34 @@ public class OllamaClient {
 
     static String parseResponse(String json) {
         JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
-        if (!obj.has("response") || obj.get("response").isJsonNull()) {
-            throw new IllegalArgumentException("Ollama error response: " + json);
+        if (!obj.has("choices") || obj.get("choices").isJsonNull()) {
+            throw new IllegalArgumentException("LLM error response: " + json);
         }
-        return obj.get("response").getAsString();
+        return obj.get("choices").getAsJsonArray()
+                  .get(0).getAsJsonObject()
+                  .get("message").getAsJsonObject()
+                  .get("content").getAsString();
     }
 
-    private static String buildRequestBody(String model, String message, String npcName, String role,
-                                            String playerName, String timeOfDay, String weather,
-                                            String surroundings) {
+    private static String buildRequestBody(String model, String userContent, String systemPrompt) {
         JsonObject obj = new JsonObject();
         obj.addProperty("model", model);
-        obj.addProperty("system", buildSystemPrompt(npcName, role, playerName, timeOfDay, weather, surroundings));
-        obj.addProperty("prompt", message);
+
+        JsonArray messages = new JsonArray();
+
+        JsonObject systemMsg = new JsonObject();
+        systemMsg.addProperty("role", "system");
+        systemMsg.addProperty("content", systemPrompt);
+        messages.add(systemMsg);
+
+        JsonObject userMsg = new JsonObject();
+        userMsg.addProperty("role", "user");
+        userMsg.addProperty("content", userContent);
+        messages.add(userMsg);
+
+        obj.add("messages", messages);
+        obj.addProperty("max_tokens", 100);
         obj.addProperty("stream", false);
-        obj.addProperty("think", false);
-        JsonObject options = new JsonObject();
-        options.addProperty("num_predict", 100);
-        obj.add("options", options);
         return GSON.toJson(obj);
     }
 
@@ -139,38 +150,6 @@ public class OllamaClient {
             Component.literal("[").append(entityName)
                 .append("]: My thoughts escape me for the moment.")
         );
-    }
-
-    public static void warmup() {
-        ensureAlive();
-        JsonObject obj = new JsonObject();
-        obj.addProperty("model", Config.LLM_MODEL.get());
-        obj.addProperty("prompt", "ping");
-        obj.addProperty("stream", false);
-        obj.addProperty("think", false);
-        JsonObject options = new JsonObject();
-        options.addProperty("num_predict", 1);
-        obj.add("options", options);
-        String body = GSON.toJson(obj);
-
-        HttpRequest request;
-        try {
-            request = HttpRequest.newBuilder()
-                .uri(URI.create(Config.LLM_ENDPOINT.get()))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        } catch (IllegalArgumentException e) {
-            DragonTweaks.LOGGER.error("[OllamaClient] Warmup skipped — invalid endpoint URI: {}", e.getMessage());
-            return;
-        }
-
-        HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-            .thenAccept(r -> DragonTweaks.LOGGER.info("[OllamaClient] LLM ready"))
-            .exceptionally(e -> {
-                DragonTweaks.LOGGER.warn("[OllamaClient] LLM unreachable — fallbacks will be used ({})", e.getMessage());
-                return null;
-            });
     }
 
     public static void shutdown() {
@@ -183,32 +162,29 @@ public class OllamaClient {
         ensureAlive();
         if (!Config.LLM_ENABLED.get()) return;
 
+        String apiKey = EnvLoader.get("OPENROUTER_API_KEY");
+        if (apiKey == null) {
+            DragonTweaks.LOGGER.error("[LLMClient] OPENROUTER_API_KEY not found in .env — skipping observation");
+            return;
+        }
+
         String npcName = entityName.getString();
         String playerName = player.getGameProfile().getName();
         String systemPrompt = buildSystemPrompt(npcName, role, playerName, timeOfDay, weather, surroundings);
-        String prompt = "You just noticed: " + whatChanged +
-                        ". React in character in 1-2 short sentences. Address " + playerName + " directly.";
-
-        JsonObject obj = new JsonObject();
-        obj.addProperty("model", Config.LLM_MODEL.get());
-        obj.addProperty("system", systemPrompt);
-        obj.addProperty("prompt", prompt);
-        obj.addProperty("stream", false);
-        obj.addProperty("think", false);
-        JsonObject options = new JsonObject();
-        options.addProperty("num_predict", 100);
-        obj.add("options", options);
-        String requestBody = GSON.toJson(obj);
+        String userContent = "You just noticed: " + whatChanged +
+                             ". React in character in 1-2 short sentences. Address " + playerName + " directly.";
+        String requestBody = buildRequestBody(Config.LLM_MODEL.get(), userContent, systemPrompt);
 
         HttpRequest request;
         try {
             request = HttpRequest.newBuilder()
                 .uri(URI.create(Config.LLM_ENDPOINT.get()))
                 .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + apiKey)
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
         } catch (IllegalArgumentException e) {
-            DragonTweaks.LOGGER.error("[OllamaClient] observe() — invalid endpoint URI: {}", e.getMessage());
+            DragonTweaks.LOGGER.error("[LLMClient] observe() — invalid endpoint URI: {}", e.getMessage());
             return;
         }
 
@@ -221,7 +197,7 @@ public class OllamaClient {
                 )
             ))
             .exceptionally(ex -> {
-                DragonTweaks.LOGGER.warn("[OllamaClient] observe() failed: {}", ex.getMessage());
+                DragonTweaks.LOGGER.warn("[LLMClient] observe() failed: {}", ex.getMessage());
                 return null;
             });
     }
@@ -236,23 +212,32 @@ public class OllamaClient {
             return;
         }
 
+        String apiKey = EnvLoader.get("OPENROUTER_API_KEY");
+        if (apiKey == null) {
+            DragonTweaks.LOGGER.error("[LLMClient] OPENROUTER_API_KEY not found in .env — using fallback");
+            server.execute(() -> sendFallback(player, entityName));
+            return;
+        }
+
         String npcName = entityName.getString();
         String playerName = player.getGameProfile().getName();
         String history = ConversationMemory.getHistory(npcId, playerName);
-        String prompt = history.isEmpty()
+        String userContent = history.isEmpty()
             ? playerName + " says: " + message
             : "[Prior conversation:]\n" + history + "\n\n" + playerName + " says: " + message;
-        String requestBody = buildRequestBody(Config.LLM_MODEL.get(), prompt, npcName, role, playerName, timeOfDay, weather, surroundings);
+        String systemPrompt = buildSystemPrompt(npcName, role, playerName, timeOfDay, weather, surroundings);
+        String requestBody = buildRequestBody(Config.LLM_MODEL.get(), userContent, systemPrompt);
 
         HttpRequest request;
         try {
             request = HttpRequest.newBuilder()
                 .uri(URI.create(Config.LLM_ENDPOINT.get()))
                 .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + apiKey)
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
         } catch (IllegalArgumentException e) {
-            DragonTweaks.LOGGER.error("[OllamaClient] Invalid endpoint URI: {}", e.getMessage());
+            DragonTweaks.LOGGER.error("[LLMClient] Invalid endpoint URI: {}", e.getMessage());
             server.execute(() -> sendFallback(player, entityName));
             return;
         }
@@ -269,12 +254,12 @@ public class OllamaClient {
                         playerName + ": " + message, npcName + ": " + reply);
                 }))
                 .exceptionally(ex -> {
-                    DragonTweaks.LOGGER.warn("[OllamaClient] LLM request failed: {}", ex.getMessage());
+                    DragonTweaks.LOGGER.warn("[LLMClient] LLM request failed: {}", ex.getMessage());
                     server.execute(() -> sendFallback(player, entityName));
                     return null;
                 });
         } catch (Exception e) {
-            DragonTweaks.LOGGER.error("[OllamaClient] Failed to dispatch async request: {}", e.getMessage());
+            DragonTweaks.LOGGER.error("[LLMClient] Failed to dispatch async request: {}", e.getMessage());
             server.execute(() -> sendFallback(player, entityName));
         }
     }
