@@ -36,7 +36,7 @@ public class Config {
             .defineInRange("npcObservationPassiveCooldownSeconds", 60, 15, 600);
 
     public static final ModConfigSpec.BooleanValue LLM_ENABLED = BUILDER
-            .comment("Enable LLM-backed responses via Ollama. If false, all responses use template fallbacks")
+            .comment("Enable LLM-backed responses via OpenRouter. If false, all responses use template fallbacks")
             .define("llmEnabled", true);
 
     public static final ModConfigSpec.ConfigValue<String> LLM_ENDPOINT = BUILDER
