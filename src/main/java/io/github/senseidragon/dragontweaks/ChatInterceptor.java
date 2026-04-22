@@ -55,7 +55,7 @@ public class ChatInterceptor {
 
         String rawMessage = event.getRawText();
 
-        // Keyword detection — runs before Ollama query; state change is immediate
+        // Keyword detection — runs before LLM query; state change is immediate
         boolean isFollowIntent = containsAny(messageLower, "follow", "come with", "walk with me", "come along", "come here", "follow me");
         boolean isStopIntent  = containsAny(messageLower, "stop", "stay", "wait here", "stay put", "stand still", "wait for me");
         if (isFollowIntent) {
