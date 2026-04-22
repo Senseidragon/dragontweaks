@@ -34,7 +34,7 @@ public class ObservationTicker {
 
             for (AssistantEntity npc : npcs) {
                 UUID npcId = npc.getUUID();
-                Map<String, Boolean> current = OllamaClient.scanSurroundingsRaw(level, npc);
+                Map<String, Boolean> current = LLMClient.scanSurroundingsRaw(level, npc);
                 Set<String> currentNames = current.keySet();
 
                 Set<String> previous = lastSeen.getOrDefault(npcId, Collections.emptySet());
@@ -64,17 +64,17 @@ public class ObservationTicker {
                 ServerPlayer target = findTarget(level, npc, npcId);
                 if (target == null) continue;  // cooldown NOT updated — opportunity lost, timer doesn't advance
 
-                String timeOfDay = OllamaClient.timeOfDay(level.getDayTime());
-                String weather = OllamaClient.weather(level.isRaining(), level.isThundering());
-                String surroundings = OllamaClient.scanSurroundings(level, npc);
+                String timeOfDay = LLMClient.timeOfDay(level.getDayTime());
+                String weather = LLMClient.weather(level.isRaining(), level.isThundering());
+                String surroundings = LLMClient.scanSurroundings(level, npc);
                 Component nameComponent = npcNameComponent(npc);
 
                 if (fireHostile) {
-                    OllamaClient.observe(server, target, nameComponent, npc.getRole(),
+                    LLMClient.observe(server, target, nameComponent, npc.getRole(),
                         timeOfDay, weather, surroundings, buildWhatChanged(newHostile));
                     lastHostileMs.put(npcId, now);
                 } else {
-                    OllamaClient.observe(server, target, nameComponent, npc.getRole(),
+                    LLMClient.observe(server, target, nameComponent, npc.getRole(),
                         timeOfDay, weather, surroundings, buildWhatChanged(newPassive));
                     lastPassiveMs.put(npcId, now);
                 }
