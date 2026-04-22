@@ -1,11 +1,13 @@
 package io.github.senseidragon.dragontweaks;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Static utility for loading key-value pairs from a {@code .env} file located
@@ -38,14 +40,6 @@ public final class EnvLoader {
         return loaded().get(key);
     }
 
-    // -------------------------------------------------------------------------
-    // Internal helpers
-    // -------------------------------------------------------------------------
-
-    /**
-     * Returns the (possibly freshly parsed) cache map. Thread-safe via
-     * double-checked locking on the volatile {@link #cache} field.
-     */
     private static Map<String, String> loaded() {
         if (cache == null) {
             synchronized (EnvLoader.class) {
@@ -57,39 +51,25 @@ public final class EnvLoader {
         return cache;
     }
 
-    /**
-     * Reads and parses the {@code .env} file. Returns an empty, unmodifiable
-     * map if the file does not exist or cannot be read.
-     */
     private static Map<String, String> loadFile() {
         Path envPath = Path.of(System.getProperty("user.dir"), ".env");
 
-        if (!Files.exists(envPath)) {
-            DragonTweaks.LOGGER.info("[EnvLoader] No .env file found at {}", envPath);
-            return Collections.emptyMap();
-        }
-
-        DragonTweaks.LOGGER.info("[EnvLoader] Loading .env file from {}", envPath);
+        DragonTweaks.LOGGER.info("Loading .env file from {}", envPath);
 
         try {
-            Map<String, String> entries = new HashMap<>();
-            for (String rawLine : Files.readAllLines(envPath)) {
-                String line = rawLine.trim();
-                if (line.isEmpty() || line.startsWith("#")) {
-                    continue;
-                }
-                int eq = line.indexOf('=');
-                if (eq < 1) {
-                    // no '=' or '=' is the very first character — skip
-                    continue;
-                }
-                String k = line.substring(0, eq).trim();
-                String v = line.substring(eq + 1).trim();
-                entries.put(k, v);
-            }
-            return Collections.unmodifiableMap(entries);
+            return Files.readAllLines(envPath, StandardCharsets.UTF_8).stream()
+                    .map(String::trim)
+                    .filter(line -> !line.isEmpty() && !line.startsWith("#"))
+                    .filter(line -> line.indexOf('=') >= 1)
+                    .collect(Collectors.toUnmodifiableMap(
+                            line -> line.substring(0, line.indexOf('=')).trim(),
+                            line -> line.substring(line.indexOf('=') + 1).trim(),
+                            (a, b) -> a));
+        } catch (NoSuchFileException e) {
+            DragonTweaks.LOGGER.info("No .env file found at {}", envPath);
+            return Collections.emptyMap();
         } catch (IOException e) {
-            DragonTweaks.LOGGER.error("[EnvLoader] Failed to read .env file: {}", e.getMessage());
+            DragonTweaks.LOGGER.error("Failed to read .env file: {}", e.getMessage());
             return Collections.emptyMap();
         }
     }
