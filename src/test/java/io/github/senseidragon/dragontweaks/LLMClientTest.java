@@ -3,7 +3,7 @@ package io.github.senseidragon.dragontweaks;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
-class OllamaClientTest {
+class LLMClientTest {
 
     @Test
     void timeOfDay_morning_boundaries() {
