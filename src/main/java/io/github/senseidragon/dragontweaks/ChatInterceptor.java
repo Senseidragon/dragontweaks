@@ -72,8 +72,8 @@ public class ChatInterceptor {
         MinecraftServer server = player.getServer();
         if (server == null) return;
 
-        String timeOfDay = OllamaClient.timeOfDay(serverLevel.getDayTime());
-        String weather = OllamaClient.weather(serverLevel.isRaining(), serverLevel.isThundering());
+        String timeOfDay = LLMClient.timeOfDay(serverLevel.getDayTime());
+        String weather = LLMClient.weather(serverLevel.isRaining(), serverLevel.isThundering());
 
         for (AssistantEntity target : targets) {
             Component entityName = target.getCustomName() != null
@@ -89,8 +89,8 @@ public class ChatInterceptor {
                 entityName.getString(),
                 rawMessage);
 
-            String surroundings = OllamaClient.scanSurroundings(serverLevel, target);
-            OllamaClient.query(server, player, entityName, rawMessage, target.getRole(), timeOfDay, weather, surroundings, target.getUUID());
+            String surroundings = LLMClient.scanSurroundings(serverLevel, target);
+            LLMClient.query(server, player, entityName, rawMessage, target.getRole(), timeOfDay, weather, surroundings, target.getUUID());
         }
     }
 
