@@ -22,8 +22,8 @@ import java.util.stream.Collectors;
  */
 public final class EnvLoader {
 
-    /** Cached entries; {@code null} means the file has not been loaded yet. */
-    private static volatile Map<String, String> cache = null;
+    // null until first call
+    private static volatile Map<String, String> cache;
 
     private EnvLoader() {
         // utility class — no instances
@@ -51,6 +51,11 @@ public final class EnvLoader {
         return cache;
     }
 
+    private static Map.Entry<String, String> splitEntry(String line) {
+        int eq = line.indexOf('=');
+        return Map.entry(line.substring(0, eq).trim(), line.substring(eq + 1).trim());
+    }
+
     private static Map<String, String> loadFile() {
         Path envPath = Path.of(System.getProperty("user.dir"), ".env");
 
@@ -61,10 +66,8 @@ public final class EnvLoader {
                     .map(String::trim)
                     .filter(line -> !line.isEmpty() && !line.startsWith("#"))
                     .filter(line -> line.indexOf('=') >= 1)
-                    .collect(Collectors.toUnmodifiableMap(
-                            line -> line.substring(0, line.indexOf('=')).trim(),
-                            line -> line.substring(line.indexOf('=') + 1).trim(),
-                            (a, b) -> a));
+                    .map(EnvLoader::splitEntry)
+                    .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> a));
         } catch (NoSuchFileException e) {
             DragonTweaks.LOGGER.info("No .env file found at {}", envPath);
             return Collections.emptyMap();
