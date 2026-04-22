@@ -40,12 +40,12 @@ public class Config {
             .define("llmEnabled", true);
 
     public static final ModConfigSpec.ConfigValue<String> LLM_ENDPOINT = BUILDER
-            .comment("Ollama API endpoint for LLM-backed responses")
-            .define("llmEndpoint", "http://SENSEI:11434/api/generate");
+            .comment("OpenRouter API endpoint for LLM-backed responses")
+            .define("llmEndpoint", "https://openrouter.ai/api/v1/chat/completions");
 
     public static final ModConfigSpec.ConfigValue<String> LLM_MODEL = BUILDER
-            .comment("Ollama model to use for LLM responses")
-            .define("llmModel", "gemma4:26b");
+            .comment("OpenRouter model to use for LLM responses")
+            .define("llmModel", "google/gemma-2-27b-it");
 
     public static final ModConfigSpec.IntValue LLM_TIMEOUT_SECONDS = BUILDER
             .comment("Seconds to wait for an LLM response before falling back to templates")
