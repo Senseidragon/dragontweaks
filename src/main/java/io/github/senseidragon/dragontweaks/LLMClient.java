@@ -27,8 +27,8 @@ import java.util.concurrent.TimeUnit;
 
 public class LLMClient {
 
-    private static ExecutorService EXECUTOR = newExecutor();
-    private static HttpClient HTTP = newHttpClient(EXECUTOR);
+    private static volatile ExecutorService EXECUTOR = newExecutor();
+    private static volatile HttpClient HTTP = newHttpClient(EXECUTOR);
 
     private static ExecutorService newExecutor() {
         return Executors.newSingleThreadExecutor(r -> new Thread(r, "dragontweaks-llm"));
@@ -38,11 +38,20 @@ public class LLMClient {
         return HttpClient.newBuilder().executor(exec).build();
     }
 
-    private static void ensureAlive() {
+    private static synchronized void ensureAlive() {
         if (EXECUTOR.isShutdown()) {
             EXECUTOR = newExecutor();
             HTTP = newHttpClient(EXECUTOR);
         }
+    }
+
+    private static HttpRequest buildRequest(String body, String apiKey) throws IllegalArgumentException {
+        return HttpRequest.newBuilder()
+            .uri(URI.create(Config.LLM_ENDPOINT.get()))
+            .header("Content-Type", "application/json")
+            .header("Authorization", "Bearer " + apiKey)
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .build();
     }
 
     private static final Gson GSON = new Gson();
@@ -177,14 +186,9 @@ public class LLMClient {
 
         HttpRequest request;
         try {
-            request = HttpRequest.newBuilder()
-                .uri(URI.create(Config.LLM_ENDPOINT.get()))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + apiKey)
-                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                .build();
+            request = buildRequest(requestBody, apiKey);
         } catch (IllegalArgumentException e) {
-            DragonTweaks.LOGGER.error("[LLMClient] observe() — invalid endpoint URI: {}", e.getMessage());
+            DragonTweaks.LOGGER.error("[LLMClient] Invalid endpoint URI: {}", e.getMessage());
             return;
         }
 
@@ -197,7 +201,7 @@ public class LLMClient {
                 )
             ))
             .exceptionally(ex -> {
-                DragonTweaks.LOGGER.warn("[LLMClient] observe() failed: {}", ex.getMessage());
+                DragonTweaks.LOGGER.warn("[LLMClient] Observation request failed: {}", ex.getMessage());
                 return null;
             });
     }
@@ -230,12 +234,7 @@ public class LLMClient {
 
         HttpRequest request;
         try {
-            request = HttpRequest.newBuilder()
-                .uri(URI.create(Config.LLM_ENDPOINT.get()))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + apiKey)
-                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                .build();
+            request = buildRequest(requestBody, apiKey);
         } catch (IllegalArgumentException e) {
             DragonTweaks.LOGGER.error("[LLMClient] Invalid endpoint URI: {}", e.getMessage());
             server.execute(() -> sendFallback(player, entityName));
