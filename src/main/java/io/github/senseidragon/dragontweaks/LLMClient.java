@@ -55,6 +55,7 @@ public class LLMClient {
     }
 
     private static final Gson GSON = new Gson();
+    private static final int MAX_RESPONSE_TOKENS = 100;
 
     private static String buildSystemPrompt(String npcName, String role, String playerName,
                                              String timeOfDay, String weather, String surroundings) {
@@ -123,13 +124,17 @@ public class LLMClient {
 
     static String parseResponse(String json) {
         JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
-        if (!obj.has("choices") || obj.get("choices").isJsonNull()) {
-            throw new IllegalArgumentException("LLM error response: " + json);
+        try {
+            var choices = obj.get("choices").getAsJsonArray();
+            if (choices.size() == 0) {
+                throw new IllegalArgumentException("Empty choices array: " + json);
+            }
+            return choices.get(0).getAsJsonObject()
+                .get("message").getAsJsonObject()
+                .get("content").getAsString();
+        } catch (NullPointerException | IllegalStateException e) {
+            throw new IllegalArgumentException("Unexpected OpenRouter response: " + json, e);
         }
-        return obj.get("choices").getAsJsonArray()
-                  .get(0).getAsJsonObject()
-                  .get("message").getAsJsonObject()
-                  .get("content").getAsString();
     }
 
     private static String buildRequestBody(String model, String userContent, String systemPrompt) {
@@ -149,7 +154,7 @@ public class LLMClient {
         messages.add(userMsg);
 
         obj.add("messages", messages);
-        obj.addProperty("max_tokens", 100);
+        obj.addProperty("max_tokens", MAX_RESPONSE_TOKENS);
         obj.addProperty("stream", false);
         return GSON.toJson(obj);
     }
@@ -168,8 +173,8 @@ public class LLMClient {
     public static void observe(MinecraftServer server, ServerPlayer player, Component entityName,
                                String role, String timeOfDay, String weather, String surroundings,
                                String whatChanged) {
-        ensureAlive();
         if (!Config.LLM_ENABLED.get()) return;
+        ensureAlive();
 
         String apiKey = EnvLoader.get("OPENROUTER_API_KEY");
         if (apiKey == null) {
@@ -210,11 +215,11 @@ public class LLMClient {
                              Component entityName, String message, String role,
                              String timeOfDay, String weather, String surroundings,
                              UUID npcId) {
-        ensureAlive();
         if (!Config.LLM_ENABLED.get()) {
             server.execute(() -> sendFallback(player, entityName));
             return;
         }
+        ensureAlive();
 
         String apiKey = EnvLoader.get("OPENROUTER_API_KEY");
         if (apiKey == null) {
