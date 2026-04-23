@@ -4,6 +4,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
@@ -14,25 +16,45 @@ public class ObservationTicker {
     private static final Map<UUID, Set<String>> lastSeen = new HashMap<>();
     private static final Map<UUID, Long> lastHostileMs = new HashMap<>();
     private static final Map<UUID, Long> lastPassiveMs = new HashMap<>();
+    private static final Map<UUID, Float> lastKnownHealth = new HashMap<>(); // target entity UUID → health
+    private static final Map<UUID, UUID> lastMobTarget = new HashMap<>();    // mob UUID → last target UUID
+    private static final Map<UUID, Long> lastThreatAlertMs = new HashMap<>(); // Fix 2: mob UUID → last alert ms
 
     private static int tickCounter = 0;
     private static final int TICK_INTERVAL = 100;
 
     public static void onServerTick(ServerTickEvent.Post event) {
-        if (++tickCounter < TICK_INTERVAL) return;
-        tickCounter = 0;
-
         if (!Config.NPC_OBSERVATIONS_ENABLED.get()) return;
 
         MinecraftServer server = event.getServer();
+        double radius = Config.NPC_AWARENESS_RADIUS.get().doubleValue();
+
+        // Fix 1: Tier 1 & 2 — search for NPCs near each player, not world-wide
+        for (ServerLevel level : server.getAllLevels()) {
+            Set<AssistantEntity> visited = new HashSet<>();
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                if (player.serverLevel() != level) continue;
+                AABB box = AABB.ofSize(player.position(), radius * 2, radius * 2, radius * 2);
+                for (AssistantEntity npc : level.getEntitiesOfClass(AssistantEntity.class, box)) {
+                    if (visited.add(npc)) checkThreats(level, npc);
+                }
+            }
+        }
+
+        // Tier 3: proximity scan every 100 ticks
         long hostileCooldownMs = Config.NPC_OBSERVATION_HOSTILE_COOLDOWN_SECONDS.get() * 1000L;
         long passiveCooldownMs = Config.NPC_OBSERVATION_PASSIVE_COOLDOWN_SECONDS.get() * 1000L;
 
         for (ServerLevel level : server.getAllLevels()) {
-            List<AssistantEntity> npcs = level.getEntitiesOfClass(
-                AssistantEntity.class, new AABB(-3e7, -3e7, -3e7, 3e7, 3e7, 3e7));
+            // Fix 1: search for NPCs near each player, not world-wide
+            Set<AssistantEntity> npcSet = new HashSet<>();
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                if (player.serverLevel() != level) continue;
+                AABB box = AABB.ofSize(player.position(), radius * 2, radius * 2, radius * 2);
+                npcSet.addAll(level.getEntitiesOfClass(AssistantEntity.class, box));
+            }
 
-            for (AssistantEntity npc : npcs) {
+            for (AssistantEntity npc : npcSet) {
                 UUID npcId = npc.getUUID();
                 Map<String, Boolean> current = LLMClient.scanSurroundingsRaw(level, npc);
                 Set<String> currentNames = current.keySet();
@@ -70,16 +92,89 @@ public class ObservationTicker {
                 Component nameComponent = npcNameComponent(npc);
 
                 if (fireHostile) {
+                    // Fix 3: pass npcId so the response is stored in ConversationMemory
                     LLMClient.observe(server, target, nameComponent, npc.getRole(),
-                        timeOfDay, weather, surroundings, buildWhatChanged(newHostile));
+                        timeOfDay, weather, surroundings, buildWhatChanged(newHostile), npcId);
                     lastHostileMs.put(npcId, now);
                 } else {
                     LLMClient.observe(server, target, nameComponent, npc.getRole(),
-                        timeOfDay, weather, surroundings, buildWhatChanged(newPassive));
+                        timeOfDay, weather, surroundings, buildWhatChanged(newPassive), npcId);
                     lastPassiveMs.put(npcId, now);
                 }
             }
         }
+    }
+
+    private static void checkThreats(ServerLevel level, AssistantEntity npc) {
+        double radius = Config.NPC_AWARENESS_RADIUS.get().doubleValue();
+        AABB box = AABB.ofSize(npc.position(), radius * 2, radius * 2, radius * 2);
+
+        List<Mob> currentMobs = level.getEntitiesOfClass(Mob.class, box, e -> !(e instanceof AssistantEntity));
+        Set<UUID> currentMobIds = new HashSet<>();
+        for (Mob mob : currentMobs) currentMobIds.add(mob.getUUID());
+
+        // Snapshot before the active loop so death-tick null-target removal doesn't erase tracking
+        Set<UUID> previouslyTracked = new HashSet<>(lastMobTarget.keySet());
+
+        // Tier 1 & 2: active threat checks — no early return so each mob is evaluated independently
+        for (Mob mob : currentMobs) {
+            LivingEntity tgt = mob.getTarget();
+            if (tgt == null) continue; // leave cleanup to the neutralized check below
+
+            UUID mobId = mob.getUUID();
+            UUID tgtId = tgt.getUUID();
+            float currentHealth = tgt.getHealth();
+            Float prevHealth = lastKnownHealth.get(tgtId);
+            UUID prevTargetId = lastMobTarget.get(mobId);
+
+            lastKnownHealth.put(tgtId, currentHealth);
+            lastMobTarget.put(mobId, tgtId);
+
+            long now = System.currentTimeMillis();
+            String aggressorType = entityTypeName(mob);
+            String targetDesc = describeTarget(tgt);
+
+            if (prevHealth != null && currentHealth < prevHealth) {
+                // Tier 1: active harm — target health dropped
+                if (now - lastThreatAlertMs.getOrDefault(mobId, 0L) >= 5000L) {
+                    lastThreatAlertMs.put(mobId, now);
+                    LLMClient.observe(npc, "a " + aggressorType + " is actively attacking " + targetDesc + "!", level);
+                }
+            } else if (!tgtId.equals(prevTargetId)) {
+                // Tier 2: newly acquired target
+                if (now - lastThreatAlertMs.getOrDefault(mobId, 0L) >= 5000L) {
+                    lastThreatAlertMs.put(mobId, now);
+                    LLMClient.observe(npc, "a " + aggressorType + " has locked onto " + targetDesc + ".", level);
+                }
+            }
+        }
+
+        // Neutralized check: mobs tracked last tick that are now gone from scan area (dead or fled)
+        for (UUID mobId : previouslyTracked) {
+            if (!currentMobIds.contains(mobId)) {
+                lastMobTarget.remove(mobId);
+                if (Math.random() < 0.3) {
+                    long now = System.currentTimeMillis();
+                    if (now - lastThreatAlertMs.getOrDefault(mobId, 0L) >= 5000L) {
+                        lastThreatAlertMs.put(mobId, now);
+                        LLMClient.observe(npc, "the threat nearby seems to have passed.", level);
+                    }
+                }
+            }
+        }
+    }
+
+    private static String describeTarget(LivingEntity target) {
+        if (target instanceof ServerPlayer player) {
+            return player.getGameProfile().getName();
+        }
+        return "a " + entityTypeName(target);
+    }
+
+    private static String entityTypeName(net.minecraft.world.entity.Entity entity) {
+        String id = entity.getType().getDescriptionId();
+        String[] parts = id.split("\\.");
+        return parts[parts.length - 1].replace("_", " ");
     }
 
     public static void clearState(UUID npcId) {
