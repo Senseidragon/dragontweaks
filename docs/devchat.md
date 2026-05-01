@@ -95,7 +95,7 @@ Verify exact field names against source before referencing.
 - `NPC_OBSERVATION_PASSIVE_COOLDOWN_SECONDS` — int, default 60
 
 **Does not exist yet — to be added:**
-- `COMMAND_RADIUS` — `ConfigValue<Integer>`, default `10`
+- *(none — `COMMAND_RADIUS` was eliminated; detection radius and command radius are the same value, read from existing detection config. Do not add a separate COMMAND_RADIUS entry.)*
 
 ---
 
@@ -103,7 +103,7 @@ Verify exact field names against source before referencing.
 
 ### Proximity Threshold
 - 10 blocks XZ radius, ±5 blocks Y tolerance (cylindrical, not spherical)
-- Implemented as `COMMAND_RADIUS` in `Config.java`. Never hardcode. All proximity checks read from config at runtime.
+- Detection radius and command radius are the same value — one config entry, not two. Never hardcode. All proximity checks read from config at runtime.
 
 ### Role Slot Expansion
 - Tied to Town Hall level. No separate building.
@@ -129,7 +129,17 @@ Neither `DragonTweaks.java` nor `AssistantCommand.java` contained any reference 
 ### ~~Step 2~~ ✅ Done — See Step 1
 
 ### ~~Step 3~~ ✅ Done — RoleAssignmentData fully wired
-`RoleAssignmentData.java` existed and is correct. A `LevelEvent.Load` handler was added to `DragonTweaks.java` that guards for `ServerLevel` and overworld dimension, then calls `RoleAssignmentData.get(serverLevel)` to initialize and attach the SavedData. In-game sanity check passed — no exceptions on world load. Confirmed 2026-05-01.
+`RoleAssignmentData.java` existed and is correct. A `LevelEvent.Load` handler was added to `DragonTweaks.java` that guards for `ServerLevel` and overworld dimension, then calls `RoleAssignmentData.get(serverLevel)` to initialize and attach the SavedData. Player launched the game, loaded a world, confirmed no `SavedData` exceptions and no `dragontweaks_roles` errors in logs. Wiring confirmed good. Confirmed 2026-05-01.
+
+### Pre-Step-4 Tasks — Complete before citizen interaction work
+
+These items are small and targeted. Complete them in order before proceeding to Step 4.
+
+1. **`/assistant locale [code]`** — debug command; injects locale string into session context; unrecognized codes fall back to `en_us` with logged warning; `/assistant locale reset` clears override. See Locale architectural decision in verification checklist.
+2. **Observation ticker idle cooldown tuning** — increase passive comment interval. Config value change only — no logic changes.
+3. **"Hmm..." refactor** — remove as standard acknowledgment; retain only as timeout fallback.
+4. **LLM hard requirement enforcement** — mod fails to start without valid API key.
+5. **SavedData persistence smoke test** — write a role assignment via command or console, do a full JVM restart, confirm the record survives. Not yet done. Must pass before proceeding to Step 4.
 
 ### Step 4 — Build `CitizenInteractDetector.java`
 - Verify correct NeoForge 1.21.1 event for player→entity right-click before writing.
@@ -249,7 +259,7 @@ Added a `NeoForge.EVENT_BUS.addListener` call in the `DragonTweaks` constructor.
 
 **RoleAssignmentData.java corruption fixed:** A prior tool interaction injected raw instruction text into lines 79–80 of the file, breaking the `load()` method. Fixed to `RoleAssignmentData data = new RoleAssignmentData();`. Build clean.
 
-**In-game sanity check passed:** `runClient` launched, world loaded, no `SavedData` exceptions, no `dragontweaks_roles` errors in log. Silent pass — wiring confirmed good.
+**In-game sanity check passed:** Player launched the game, loaded a world, confirmed no `SavedData` exceptions and no `dragontweaks_roles` errors in logs. Wiring confirmed good.
 
 ---
 
