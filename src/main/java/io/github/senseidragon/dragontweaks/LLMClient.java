@@ -25,6 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+
 public class LLMClient {
 
     private static volatile ExecutorService EXECUTOR = newExecutor();
@@ -170,9 +171,37 @@ public class LLMClient {
         EXECUTOR.shutdownNow();
     }
 
+    public static void observe(AssistantEntity npc, String tierPrompt, ServerLevel level) {
+        if (!Config.LLM_ENABLED.get()) return;
+
+        MinecraftServer server = level.getServer();
+        UUID npcId = npc.getUUID();
+        double proximity = Config.COMMAND_PROXIMITY.get();
+        AABB box = AABB.ofSize(npc.position(), proximity * 2, proximity * 2, proximity * 2);
+
+        ServerPlayer target = null;
+        double nearestDistSq = Double.MAX_VALUE;
+        for (ServerPlayer candidate : level.getEntitiesOfClass(ServerPlayer.class, box)) {
+            if (!ConversationMemory.getHistory(npcId, candidate.getGameProfile().getName()).isEmpty()) {
+                double distSq = npc.distanceToSqr(candidate);
+                if (distSq < nearestDistSq) {
+                    nearestDistSq = distSq;
+                    target = candidate;
+                }
+            }
+        }
+        if (target == null) return;
+
+        Component nameComponent = npc.getCustomName() != null ? npc.getCustomName() : Component.literal("Assistant");
+        // Fix 3: pass npcId so the response is stored in ConversationMemory
+        observe(server, target, nameComponent, npc.getRole(),
+                timeOfDay(level.getDayTime()), weather(level.isRaining(), level.isThundering()),
+                scanSurroundings(level, npc), tierPrompt, npcId);
+    }
+
     public static void observe(MinecraftServer server, ServerPlayer player, Component entityName,
                                String role, String timeOfDay, String weather, String surroundings,
-                               String whatChanged) {
+                               String whatChanged, UUID npcId) {
         if (!Config.LLM_ENABLED.get()) return;
         ensureAlive();
 
@@ -200,11 +229,14 @@ public class LLMClient {
         HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
             .orTimeout(Config.LLM_TIMEOUT_SECONDS.get(), TimeUnit.SECONDS)
             .thenApply(response -> parseResponse(response.body()))
-            .thenAccept(reply -> server.execute(() ->
+            .thenAccept(reply -> server.execute(() -> {
                 player.sendSystemMessage(
                     Component.literal("[").append(entityName).append("]: " + reply)
-                )
-            ))
+                );
+                // Fix 3: store observation in conversation history so Hugo can reference it later
+                ConversationMemory.addExchange(npcId, playerName,
+                    "[observation]: " + whatChanged, npcName + ": " + reply);
+            }))
             .exceptionally(ex -> {
                 DragonTweaks.LOGGER.warn("[LLMClient] Observation request failed: {}", ex.getMessage());
                 return null;

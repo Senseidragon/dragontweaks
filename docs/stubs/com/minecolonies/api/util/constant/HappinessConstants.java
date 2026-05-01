@@ -1,0 +1,30 @@
+﻿Compiled from "HappinessConstants.java"
+public final class com.minecolonies.api.util.constant.HappinessConstants {
+  public static final int COMPLAIN_DAYS_WITHOUT_HOUSE;
+  public static final int DEMANDS_DAYS_WITHOUT_HOUSE;
+  public static final int COMPLAIN_DAYS_SICK;
+  public static final int DEMANDS_CURE_SICK;
+  public static final int COMPLAIN_DAYS_WITHOUT_JOB;
+  public static final int DEMANDS_DAYS_WITHOUT_JOB;
+  public static final int MAX_HAPPINESS;
+  public static final int IDLE_AT_JOB_COMPLAINS_DAYS;
+  public static final int IDLE_AT_JOB_DEMANDS_DAYS;
+  public static final java.lang.String TAG_HAPPINESS;
+  public static final java.lang.String TAG_NEW_HAPPINESS;
+  public static final java.lang.String HOMELESSNESS;
+  public static final java.lang.String UNEMPLOYMENT;
+  public static final java.lang.String HEALTH;
+  public static final java.lang.String IDLEATJOB;
+  public static final java.lang.String SCHOOL;
+  public static final java.lang.String MYSTICAL_SITE;
+  public static final java.lang.String SECURITY;
+  public static final java.lang.String SOCIAL;
+  public static final java.lang.String DAMAGE;
+  public static final java.lang.String DEATH;
+  public static final java.lang.String RAIDWITHOUTDEATH;
+  public static final java.lang.String SLEPTTONIGHT;
+  public static final java.lang.String QUEST;
+  public static final java.lang.String FOOD;
+  public static final java.lang.String HADGREATFOOD;
+  public static final java.util.Set<java.lang.String> VALID_HAPPINESS_MODIFIERS;
+}

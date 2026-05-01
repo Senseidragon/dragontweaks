@@ -9,8 +9,17 @@ import java.util.Collections;
 
 public class ConversationMemory {
 
-    private static final int MAX_EXCHANGES = 10;
+    private static final int MAX_EXCHANGES = 20;
     private static final Map<UUID, Map<String, Deque<String>>> MEMORY = new HashMap<>();
+
+    public static void addObservation(UUID npcId, String playerName, String npcLine) {
+        Map<String, Deque<String>> npcMemory = MEMORY.computeIfAbsent(npcId, k -> new HashMap<>());
+        Deque<String> history = npcMemory.computeIfAbsent(playerName.toLowerCase(), k -> new ArrayDeque<>());
+        history.addLast("[observed]: " + npcLine);
+        while (history.size() > MAX_EXCHANGES * 2) {
+            history.pollFirst();
+        }
+    }
 
     public static void addExchange(UUID npcId, String playerName, String playerLine, String npcLine) {
         Map<String, Deque<String>> npcMemory = MEMORY.computeIfAbsent(npcId, k -> new HashMap<>());

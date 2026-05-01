@@ -1,0 +1,40 @@
+﻿Compiled from "IPermissions.java"
+public interface com.minecolonies.api.colony.permissions.IPermissions {
+  public static final int OWNER_RANK_ID;
+  public static final int OFFICER_RANK_ID;
+  public static final int FRIEND_RANK_ID;
+  public static final int NEUTRAL_RANK_ID;
+  public static final int HOSTILE_RANK_ID;
+  public abstract boolean hasPermission(com.minecolonies.api.colony.permissions.Rank, com.minecolonies.api.colony.permissions.Action);
+  public abstract java.util.Set<com.minecolonies.api.colony.permissions.ColonyPlayer> getPlayersByRank(com.minecolonies.api.colony.permissions.Rank);
+  public abstract java.util.Set<com.minecolonies.api.colony.permissions.ColonyPlayer> getPlayersByRank(java.util.Set<com.minecolonies.api.colony.permissions.Rank>);
+  public abstract java.util.Map<java.lang.Integer, com.minecolonies.api.colony.permissions.Rank> getRanks();
+  public abstract com.minecolonies.api.colony.permissions.Rank getRank(int);
+  public abstract com.minecolonies.api.colony.permissions.Rank getRankOwner();
+  public abstract com.minecolonies.api.colony.permissions.Rank getRankOfficer();
+  public abstract com.minecolonies.api.colony.permissions.Rank getRankHostile();
+  public abstract com.minecolonies.api.colony.permissions.Rank getRankNeutral();
+  public abstract com.minecolonies.api.colony.permissions.Rank getRankFriend();
+  public abstract boolean hasPermission(net.minecraft.world.entity.player.Player, com.minecolonies.api.colony.permissions.Action);
+  public abstract boolean addPlayer(java.lang.String, com.minecolonies.api.colony.permissions.Rank, net.minecraft.world.level.Level);
+  public abstract boolean addPlayer(java.util.UUID, java.lang.String, com.minecolonies.api.colony.permissions.Rank);
+  public abstract java.lang.String getOwnerName();
+  public abstract boolean isColonyMember(net.minecraft.world.entity.player.Player);
+  public abstract boolean alterPermission(com.minecolonies.api.colony.permissions.Rank, com.minecolonies.api.colony.permissions.Rank, com.minecolonies.api.colony.permissions.Action, boolean);
+  public abstract java.util.Map$Entry<java.util.UUID, com.minecolonies.api.colony.permissions.ColonyPlayer> getOwnerEntry();
+  public abstract boolean setOwner(net.minecraft.world.entity.player.Player);
+  public abstract boolean canAlterPermission(com.minecolonies.api.colony.permissions.Rank, com.minecolonies.api.colony.permissions.Rank, com.minecolonies.api.colony.permissions.Action);
+  public abstract void setOwnerAbandoned();
+  public abstract java.util.UUID getOwner();
+  public abstract java.util.Map<java.util.UUID, com.minecolonies.api.colony.permissions.ColonyPlayer> getPlayers();
+  public abstract boolean setPlayerRank(java.util.UUID, com.minecolonies.api.colony.permissions.Rank, net.minecraft.world.level.Level);
+  public abstract boolean addPlayer(com.mojang.authlib.GameProfile, com.minecolonies.api.colony.permissions.Rank);
+  public abstract com.minecolonies.api.colony.permissions.Rank getRank(java.util.UUID);
+  public abstract com.minecolonies.api.colony.permissions.Rank getRank(net.minecraft.world.entity.player.Player);
+  public abstract void restoreOwnerIfNull();
+  public abstract boolean setPermission(com.minecolonies.api.colony.permissions.Rank, com.minecolonies.api.colony.permissions.Action, boolean);
+  public abstract boolean removePlayer(java.util.UUID);
+  public abstract void addRank(java.lang.String);
+  public abstract void removeRank(com.minecolonies.api.colony.permissions.Rank);
+  public abstract java.util.Set<com.minecolonies.api.colony.permissions.ColonyPlayer> getFilteredPlayers(java.util.function.Predicate<com.minecolonies.api.colony.permissions.Rank>);
+}

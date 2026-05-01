@@ -1,0 +1,41 @@
+﻿Compiled from "ItemAbilities.java"
+public class net.neoforged.neoforge.common.ItemAbilities {
+  public static final net.neoforged.neoforge.common.ItemAbility AXE_DIG;
+  public static final net.neoforged.neoforge.common.ItemAbility PICKAXE_DIG;
+  public static final net.neoforged.neoforge.common.ItemAbility SHOVEL_DIG;
+  public static final net.neoforged.neoforge.common.ItemAbility HOE_DIG;
+  public static final net.neoforged.neoforge.common.ItemAbility SWORD_DIG;
+  public static final net.neoforged.neoforge.common.ItemAbility SHEARS_DIG;
+  public static final net.neoforged.neoforge.common.ItemAbility AXE_STRIP;
+  public static final net.neoforged.neoforge.common.ItemAbility AXE_SCRAPE;
+  public static final net.neoforged.neoforge.common.ItemAbility AXE_WAX_OFF;
+  public static final net.neoforged.neoforge.common.ItemAbility SHOVEL_FLATTEN;
+  public static final net.neoforged.neoforge.common.ItemAbility SHOVEL_DOUSE;
+  public static final net.neoforged.neoforge.common.ItemAbility SWORD_SWEEP;
+  public static final net.neoforged.neoforge.common.ItemAbility SHEARS_HARVEST;
+  public static final net.neoforged.neoforge.common.ItemAbility SHEARS_REMOVE_ARMOR;
+  public static final net.neoforged.neoforge.common.ItemAbility SHEARS_CARVE;
+  public static final net.neoforged.neoforge.common.ItemAbility SHEARS_DISARM;
+  public static final net.neoforged.neoforge.common.ItemAbility SHEARS_TRIM;
+  public static final net.neoforged.neoforge.common.ItemAbility HOE_TILL;
+  public static final net.neoforged.neoforge.common.ItemAbility SHIELD_BLOCK;
+  public static final net.neoforged.neoforge.common.ItemAbility FISHING_ROD_CAST;
+  public static final net.neoforged.neoforge.common.ItemAbility TRIDENT_THROW;
+  public static final net.neoforged.neoforge.common.ItemAbility BRUSH_BRUSH;
+  public static final net.neoforged.neoforge.common.ItemAbility FIRESTARTER_LIGHT;
+  public static final net.neoforged.neoforge.common.ItemAbility SPYGLASS_SCOPE;
+  public static final java.util.Set<net.neoforged.neoforge.common.ItemAbility> DEFAULT_AXE_ACTIONS;
+  public static final java.util.Set<net.neoforged.neoforge.common.ItemAbility> DEFAULT_HOE_ACTIONS;
+  public static final java.util.Set<net.neoforged.neoforge.common.ItemAbility> DEFAULT_SHOVEL_ACTIONS;
+  public static final java.util.Set<net.neoforged.neoforge.common.ItemAbility> DEFAULT_PICKAXE_ACTIONS;
+  public static final java.util.Set<net.neoforged.neoforge.common.ItemAbility> DEFAULT_SWORD_ACTIONS;
+  public static final java.util.Set<net.neoforged.neoforge.common.ItemAbility> DEFAULT_SHEARS_ACTIONS;
+  public static final java.util.Set<net.neoforged.neoforge.common.ItemAbility> DEFAULT_SHIELD_ACTIONS;
+  public static final java.util.Set<net.neoforged.neoforge.common.ItemAbility> DEFAULT_FISHING_ROD_ACTIONS;
+  public static final java.util.Set<net.neoforged.neoforge.common.ItemAbility> DEFAULT_TRIDENT_ACTIONS;
+  public static final java.util.Set<net.neoforged.neoforge.common.ItemAbility> DEFAULT_BRUSH_ACTIONS;
+  public static final java.util.Set<net.neoforged.neoforge.common.ItemAbility> DEFAULT_FLINT_ACTIONS;
+  public static final java.util.Set<net.neoforged.neoforge.common.ItemAbility> DEFAULT_FIRECHARGE_ACTIONS;
+  public static final java.util.Set<net.neoforged.neoforge.common.ItemAbility> DEFAULT_SPYGLASS_ACTIONS;
+  public net.neoforged.neoforge.common.ItemAbilities();
+}

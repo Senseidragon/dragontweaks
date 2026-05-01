@@ -1,0 +1,29 @@
+﻿Compiled from "ColonyConstants.java"
+public final class com.minecolonies.api.util.constant.ColonyConstants {
+  public static final int DATA_VERSION;
+  public static final java.lang.String DATA_VERSION_TAG;
+  public static final java.util.Random rand;
+  public static final net.minecraft.server.level.TicketType<net.minecraft.world.level.ChunkPos> KEEP_LOADED_TYPE;
+  public static final int CHECK_WAYPOINT_EVERY;
+  public static final int UPDATE_SUBSCRIBERS_INTERVAL;
+  public static final int UPDATE_TRAVELING_INTERVAL;
+  public static final int UPDATE_STATE_INTERVAL;
+  public static final int UPDATE_RS_INTERVAL;
+  public static final int UPDATE_DAYTIME_INTERVAL;
+  public static final int MAX_COLONY_EVENTS;
+  public static final double ARCHER_BARBARIANS_MULTIPLIER;
+  public static final double CHIEF_BARBARIANS_MULTIPLIER;
+  public static final int SMALL_HORDE_MESSAGE_ID;
+  public static final int MEDIUM_HORDE_MESSAGE_ID;
+  public static final int BIG_HORDE_MESSAGE_ID;
+  public static final int HUGE_HORDE_MESSAGE_ID;
+  public static final int SMALL_HORDE_SIZE;
+  public static final int MEDIUM_HORDE_SIZE;
+  public static final int BIG_HORDE_SIZE;
+  public static final java.lang.String SMALL_SHIP;
+  public static final java.lang.String MEDIUM_SHIP;
+  public static final java.lang.String BIG_SHIP;
+  public static final long ONE_HOUR_IN_MILLIS;
+  public static final int CHUNK_UNLOAD_DELAY;
+  public static final net.minecraft.world.scores.Scoreboard EMPTY_SCOREBOARD;
+}

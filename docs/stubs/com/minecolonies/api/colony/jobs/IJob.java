@@ -1,0 +1,45 @@
+﻿Compiled from "IJob.java"
+public interface com.minecolonies.api.colony.jobs.IJob<AI extends com.minecolonies.api.entity.ai.ITickingStateAI> extends net.neoforged.neoforge.common.util.INBTSerializable<net.minecraft.nbt.CompoundTag> {
+  public abstract com.minecolonies.api.colony.jobs.registry.JobEntry getJobRegistryEntry();
+  public abstract net.minecraft.resources.ResourceLocation getModel();
+  public abstract com.minecolonies.api.colony.IColony getColony();
+  public abstract java.util.Set<com.minecolonies.api.colony.requestsystem.token.IToken<?>> getAsyncRequests();
+  public abstract void createAI();
+  public abstract AI generateAI();
+  public abstract boolean hasCheckedForFoodToday();
+  public abstract void setCheckedForFood();
+  public abstract java.lang.String getNameTagDescription();
+  public abstract void setNameTag(java.lang.String);
+  public abstract void triggerDeathAchievement(net.minecraft.world.damagesource.DamageSource, com.minecolonies.api.entity.citizen.AbstractEntityCitizen);
+  public abstract boolean onStackPickUp(net.minecraft.world.item.ItemStack);
+  public default void onLevelUp();
+  public default void initEntityValues(com.minecolonies.api.entity.citizen.AbstractEntityCitizen);
+  public abstract com.minecolonies.api.colony.ICitizenData getCitizen();
+  public abstract void onWakeUp();
+  public abstract boolean canAIBeInterrupted();
+  public abstract int getActionsDone();
+  public abstract void incrementActionsDone();
+  public abstract void incrementActionsDone(int);
+  public abstract void clearActionsDone();
+  public abstract AI getWorkerAI();
+  public abstract boolean isIdling();
+  public abstract void resetAI();
+  public abstract boolean allowsAvoidance();
+  public abstract double getDiseaseModifier();
+  public abstract void onRemoval();
+  public abstract boolean ignoresDamage(net.minecraft.world.damagesource.DamageSource);
+  public abstract void markRequestSync(com.minecolonies.api.colony.requestsystem.token.IToken<?>);
+  public abstract boolean pickupSuccess(net.minecraft.world.item.ItemStack);
+  public abstract void processOfflineTime(long);
+  public abstract void serializeToView(net.minecraft.network.RegistryFriendlyByteBuf);
+  public default int getInactivityLimit();
+  public default int getIdleSeverity(boolean);
+  public default void triggerActivityChangeAction(boolean);
+  public abstract void setRegistryEntry(com.minecolonies.api.colony.jobs.registry.JobEntry);
+  public default boolean isGuard();
+  public abstract net.minecraft.core.BlockPos getBuildingPos();
+  public abstract com.minecolonies.api.colony.buildings.IBuilding getWorkBuilding();
+  public abstract com.minecolonies.api.colony.buildings.modules.IAssignsJob getWorkModule();
+  public abstract boolean assignTo(com.minecolonies.api.colony.buildings.modules.IAssignsJob);
+  public default double getSaturationFactor();
+}

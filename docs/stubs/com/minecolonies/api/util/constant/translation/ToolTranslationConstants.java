@@ -1,0 +1,47 @@
+﻿Compiled from "ToolTranslationConstants.java"
+public class com.minecolonies.api.util.constant.translation.ToolTranslationConstants {
+  public static final java.lang.String TOOL_TYPE_NONE;
+  public static final java.lang.String TOOL_TYPE_PICKAXE;
+  public static final java.lang.String TOOL_TYPE_SHOVEL;
+  public static final java.lang.String TOOL_TYPE_AXE;
+  public static final java.lang.String TOOL_TYPE_HOE;
+  public static final java.lang.String TOOL_TYPE_SWORD;
+  public static final java.lang.String TOOL_TYPE_BOW;
+  public static final java.lang.String TOOL_TYPE_FISHING_ROD;
+  public static final java.lang.String TOOL_TYPE_SHEARS;
+  public static final java.lang.String TOOL_TYPE_SHIELD;
+  public static final java.lang.String TOOL_TYPE_HELMET;
+  public static final java.lang.String TOOL_TYPE_LEGGINGS;
+  public static final java.lang.String TOOL_TYPE_CHEST_PLATE;
+  public static final java.lang.String TOOL_TYPE_BOOTS;
+  public static final java.lang.String TOOL_TYPE_LIGHTER;
+  public static final java.lang.String TOOL_TYPE_LEAD;
+  public static final java.lang.String TOOL_RALLY_BANNER_ACTIVATED;
+  public static final java.lang.String TOOL_RALLY_BANNER_DEACTIVATED;
+  public static final java.lang.String TOOL_RALLY_BANNER_NO_GUARDS;
+  public static final java.lang.String TOOL_RALLY_BANNER_NEEDS_RESEARCH;
+  public static final java.lang.String TOOL_GENERIC_SCROLL_HIGHLIGHT_DESCRIPTION;
+  public static final java.lang.String TOOL_GENERIC_SCROLL_BUFF_DESCRIPTION;
+  public static final java.lang.String TOOL_COLONY_TELEPORT_SCROLL_NO_COLONY;
+  public static final java.lang.String TOOL_COLONY_TELEPORT_SCROLL_COLONY_NAME;
+  public static final java.lang.String TOOL_COLONY_TELEPORT_SCROLL_DESCRIPTION;
+  public static final java.lang.String TOOL_COLONY_TELEPORT_AREA_SCROLL_DESCRIPTION;
+  public static final java.lang.String TOOL_GUARD_SCROLL_NO_GUARD_BUILDING;
+  public static final java.lang.String TOOL_BEEHIVE_SCEPTER_ADD_HIVE;
+  public static final java.lang.String TOOL_BEEHIVE_SCEPTER_REMOVE_HIVE;
+  public static final java.lang.String TOOL_BEEHIVE_SCEPTER_MAX_HIVES;
+  public static final java.lang.String TOOL_GUARD_SCEPTER_ADD_GUARD_TARGET;
+  public static final java.lang.String TOOL_GUARD_SCEPTER_ADD_PATROL_TARGET;
+  public static final java.lang.String TOOL_GUARD_SCEPTER_ADD_PATROL_TARGETS_FINISHED;
+  public static final java.lang.String TOOL_GUARD_SCEPTER_TOWER_TOO_FAR;
+  public static final java.lang.String TOOL_LUMBERJACK_SCEPTER_POSITION_A_SET;
+  public static final java.lang.String TOOL_LUMBERJACK_SCEPTER_POSITION_B_SET;
+  public static final java.lang.String TOOL_LUMBERJACK_SCEPTER_AREA_SET;
+  public static final java.lang.String TOOL_LUMBERJACK_SCEPTER_AREA_TOO_BIG;
+  public static final java.lang.String TOOL_PERMISSION_SCEPTER_SET_MODE;
+  public static final java.lang.String TOOL_PERMISSION_SCEPTER_MODE;
+  public static final java.lang.String TOOL_PERMISSION_SCEPTER_MODE_BLOCK;
+  public static final java.lang.String TOOL_PERMISSION_SCEPTER_MODE_LOCATION;
+  public static final java.lang.String TOOL_PERMISSION_SCEPTER_PERMISSION_DENY;
+  public com.minecolonies.api.util.constant.translation.ToolTranslationConstants();
+}

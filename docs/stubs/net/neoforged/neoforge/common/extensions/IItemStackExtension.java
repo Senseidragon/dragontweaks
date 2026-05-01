@@ -1,0 +1,44 @@
+﻿Compiled from "IItemStackExtension.java"
+public interface net.neoforged.neoforge.common.extensions.IItemStackExtension {
+  public default net.minecraft.world.item.ItemStack getCraftingRemainingItem();
+  public default boolean hasCraftingRemainingItem();
+  public default int getBurnTime(net.minecraft.world.item.crafting.RecipeType<?>);
+  public default net.minecraft.world.InteractionResult onItemUseFirst(net.minecraft.world.item.context.UseOnContext);
+  public default boolean canPerformAction(net.neoforged.neoforge.common.ItemAbility);
+  public default boolean shouldCauseBlockBreakReset(net.minecraft.world.item.ItemStack);
+  public default boolean isPrimaryItemFor(net.minecraft.core.Holder<net.minecraft.world.item.enchantment.Enchantment>);
+  public default boolean supportsEnchantment(net.minecraft.core.Holder<net.minecraft.world.item.enchantment.Enchantment>);
+  public default int getEnchantmentLevel(net.minecraft.core.Holder<net.minecraft.world.item.enchantment.Enchantment>);
+  public default net.minecraft.world.item.enchantment.ItemEnchantments getAllEnchantments(net.minecraft.core.HolderLookup$RegistryLookup<net.minecraft.world.item.enchantment.Enchantment>);
+  public default int getEnchantmentValue();
+  public default net.minecraft.world.entity.EquipmentSlot getEquipmentSlot();
+  public default boolean canDisableShield(net.minecraft.world.item.ItemStack, net.minecraft.world.entity.LivingEntity, net.minecraft.world.entity.LivingEntity);
+  public default boolean onEntitySwing(net.minecraft.world.entity.LivingEntity);
+  public default boolean onEntitySwing(net.minecraft.world.entity.LivingEntity, net.minecraft.world.InteractionHand);
+  public default void onStopUsing(net.minecraft.world.entity.LivingEntity, int);
+  public default int getEntityLifespan(net.minecraft.world.level.Level);
+  public default boolean onEntityItemUpdate(net.minecraft.world.entity.item.ItemEntity);
+  public default float getXpRepairRatio();
+  public default void onAnimalArmorTick(net.minecraft.world.level.Level, net.minecraft.world.entity.Mob);
+  public default boolean canEquip(net.minecraft.world.entity.EquipmentSlot, net.minecraft.world.entity.LivingEntity);
+  public default boolean isBookEnchantable(net.minecraft.world.item.ItemStack);
+  public default boolean onDroppedByPlayer(net.minecraft.world.entity.player.Player);
+  public default net.minecraft.network.chat.Component getHighlightTip(net.minecraft.network.chat.Component);
+  public default boolean doesSneakBypassUse(net.minecraft.world.level.LevelReader, net.minecraft.core.BlockPos, net.minecraft.world.entity.player.Player);
+  public default boolean isRepairable();
+  public default boolean isPiglinCurrency();
+  public default boolean makesPiglinsNeutral(net.minecraft.world.entity.LivingEntity);
+  public default boolean isEnderMask(net.minecraft.world.entity.player.Player, net.minecraft.world.entity.monster.EnderMan);
+  public default boolean canElytraFly(net.minecraft.world.entity.LivingEntity);
+  public default boolean elytraFlightTick(net.minecraft.world.entity.LivingEntity, int);
+  public default boolean canWalkOnPowderedSnow(net.minecraft.world.entity.LivingEntity);
+  public default net.minecraft.world.phys.AABB getSweepHitBox(net.minecraft.world.entity.player.Player, net.minecraft.world.entity.Entity);
+  public default void onDestroyed(net.minecraft.world.entity.item.ItemEntity, net.minecraft.world.damagesource.DamageSource);
+  public default net.minecraft.world.food.FoodProperties getFoodProperties(net.minecraft.world.entity.LivingEntity);
+  public default boolean isNotReplaceableByPickAction(net.minecraft.world.entity.player.Player, int);
+  public default boolean canGrindstoneRepair();
+  public default <T, C> T getCapability(net.neoforged.neoforge.capabilities.ItemCapability<T, C>, C);
+  public default <T> T getCapability(net.neoforged.neoforge.capabilities.ItemCapability<T, java.lang.Void>);
+  public default net.minecraft.world.item.component.ItemAttributeModifiers getAttributeModifiers();
+  public default boolean canFitInsideContainerItems();
+}

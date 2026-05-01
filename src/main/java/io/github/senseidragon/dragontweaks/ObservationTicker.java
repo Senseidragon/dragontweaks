@@ -16,20 +16,27 @@ public class ObservationTicker {
     private static final Map<UUID, Set<String>> lastSeen = new HashMap<>();
     private static final Map<UUID, Long> lastHostileMs = new HashMap<>();
     private static final Map<UUID, Long> lastPassiveMs = new HashMap<>();
-    private static final Map<UUID, Float> lastKnownHealth = new HashMap<>(); // target entity UUID → health
-    private static final Map<UUID, UUID> lastMobTarget = new HashMap<>();    // mob UUID → last target UUID
-    private static final Map<UUID, Long> lastThreatAlertMs = new HashMap<>(); // Fix 2: mob UUID → last alert ms
+    // Tier 1 & 2 threat tracking — keyed by mob UUID
+    private static final Map<UUID, UUID> lastMobTarget = new HashMap<>();
+    private static final Map<UUID, Float> lastKnownHealth = new HashMap<>();
+    private static final Map<UUID, Long> lastThreatAlertMs = new HashMap<>();
+
+    // Per-NPC threat state: true = hostiles currently present, false = clear
+    // Used to suppress repeat observations when hostile count increases (e.g. slime splits)
+    private static final Map<UUID, Boolean> npcThreatState = new HashMap<>();
+    private static final Map<UUID, Long> lastThreatStateChangeMs = new HashMap<>();
+    private static final Map<UUID, Mob> lastMobRef = new HashMap<>();
 
     private static int tickCounter = 0;
     private static final int TICK_INTERVAL = 100;
 
     public static void onServerTick(ServerTickEvent.Post event) {
+        if (++tickCounter % TICK_INTERVAL != 0) return;
         if (!Config.NPC_OBSERVATIONS_ENABLED.get()) return;
 
         MinecraftServer server = event.getServer();
         double radius = Config.NPC_AWARENESS_RADIUS.get().doubleValue();
 
-        // Fix 1: Tier 1 & 2 — search for NPCs near each player, not world-wide
         for (ServerLevel level : server.getAllLevels()) {
             Set<AssistantEntity> visited = new HashSet<>();
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
@@ -41,12 +48,10 @@ public class ObservationTicker {
             }
         }
 
-        // Tier 3: proximity scan every 100 ticks
         long hostileCooldownMs = Config.NPC_OBSERVATION_HOSTILE_COOLDOWN_SECONDS.get() * 1000L;
         long passiveCooldownMs = Config.NPC_OBSERVATION_PASSIVE_COOLDOWN_SECONDS.get() * 1000L;
 
         for (ServerLevel level : server.getAllLevels()) {
-            // Fix 1: search for NPCs near each player, not world-wide
             Set<AssistantEntity> npcSet = new HashSet<>();
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                 if (player.serverLevel() != level) continue;
@@ -63,7 +68,6 @@ public class ObservationTicker {
                 Set<String> newTypes = new HashSet<>(currentNames);
                 newTypes.removeAll(previous);
 
-                // Update lastSeen unconditionally — prevents cooldown expiry from re-firing stale entries
                 lastSeen.put(npcId, new HashSet<>(currentNames));
 
                 if (newTypes.isEmpty()) continue;
@@ -84,7 +88,7 @@ public class ObservationTicker {
                 if (!fireHostile && !firePassive) continue;
 
                 ServerPlayer target = findTarget(level, npc, npcId);
-                if (target == null) continue;  // cooldown NOT updated — opportunity lost, timer doesn't advance
+                if (target == null) continue;
 
                 String timeOfDay = LLMClient.timeOfDay(level.getDayTime());
                 String weather = LLMClient.weather(level.isRaining(), level.isThundering());
@@ -92,7 +96,6 @@ public class ObservationTicker {
                 Component nameComponent = npcNameComponent(npc);
 
                 if (fireHostile) {
-                    // Fix 3: pass npcId so the response is stored in ConversationMemory
                     LLMClient.observe(server, target, nameComponent, npc.getRole(),
                         timeOfDay, weather, surroundings, buildWhatChanged(newHostile), npcId);
                     lastHostileMs.put(npcId, now);
@@ -113,52 +116,64 @@ public class ObservationTicker {
         Set<UUID> currentMobIds = new HashSet<>();
         for (Mob mob : currentMobs) currentMobIds.add(mob.getUUID());
 
-        // Snapshot before the active loop so death-tick null-target removal doesn't erase tracking
-        Set<UUID> previouslyTracked = new HashSet<>(lastMobTarget.keySet());
+        UUID npcId = npc.getUUID();
+        long now = System.currentTimeMillis();
 
-        // Tier 1 & 2: active threat checks — no early return so each mob is evaluated independently
+        // Determine whether any hostile mob is actively targeting something
+        boolean anyActiveThreats = false;
+
         for (Mob mob : currentMobs) {
             LivingEntity tgt = mob.getTarget();
-            if (tgt == null) continue; // leave cleanup to the neutralized check below
-
-            UUID mobId = mob.getUUID();
+            if (tgt == null) continue;
+            anyActiveThreats = true;
             UUID tgtId = tgt.getUUID();
-            float currentHealth = tgt.getHealth();
-            Float prevHealth = lastKnownHealth.get(tgtId);
-            UUID prevTargetId = lastMobTarget.get(mobId);
+            lastKnownHealth.put(tgtId, tgt.getHealth());
+            lastMobTarget.put(mob.getUUID(), tgtId);
+            lastMobRef.put(mob.getUUID(), mob);
+        }
+        // Threat state change model — fire once on flip, not on every new mob UUID
+        boolean wasPresent = npcThreatState.getOrDefault(npcId, false);
 
-            lastKnownHealth.put(tgtId, currentHealth);
-            lastMobTarget.put(mobId, tgtId);
+       if (anyActiveThreats && !wasPresent) {
+            // Threat appeared — find the most dangerous mob to describe
+            npcThreatState.put(npcId, true);
+            lastThreatStateChangeMs.put(npcId, now);
 
-            long now = System.currentTimeMillis();
-            String aggressorType = entityTypeName(mob);
-            String targetDesc = describeTarget(tgt);
+            Mob representative = null;
+            for (Mob mob : currentMobs) {
+                if (mob.getTarget() != null) { representative = mob; break; }
+            }
+            if (representative != null) {
+                String aggressorType = entityTypeName(representative);
+                String targetDesc = describeTarget(representative.getTarget());
+                LLMClient.observe(npc, "a " + aggressorType + " is targeting " + targetDesc + "!", level);
+            }
 
-            if (prevHealth != null && currentHealth < prevHealth) {
-                // Tier 1: active harm — target health dropped
-                if (now - lastThreatAlertMs.getOrDefault(mobId, 0L) >= 5000L) {
-                    lastThreatAlertMs.put(mobId, now);
-                    LLMClient.observe(npc, "a " + aggressorType + " is actively attacking " + targetDesc + "!", level);
-                }
-            } else if (!tgtId.equals(prevTargetId)) {
-                // Tier 2: newly acquired target
-                if (now - lastThreatAlertMs.getOrDefault(mobId, 0L) >= 5000L) {
-                    lastThreatAlertMs.put(mobId, now);
-                    LLMClient.observe(npc, "a " + aggressorType + " has locked onto " + targetDesc + ".", level);
-                }
+        } else if (!anyActiveThreats && wasPresent) {
+            // Threat cleared
+            npcThreatState.put(npcId, false);
+            lastThreatStateChangeMs.put(npcId, now);
+
+            // 30% chance of all-clear comment to avoid it being too chatty
+            if (Math.random() < 0.3) {
+                LLMClient.observe(npc, "the threat nearby seems to have passed.", level);
             }
         }
+        // If threat state unchanged (still present or still clear), do nothing —
+        // this is the fix for slime splits: new child slime UUIDs don't trigger fresh alerts
 
-        // Neutralized check: mobs tracked last tick that are now gone from scan area (dead or fled)
+        // Clean up tracking for mobs that have left the area
+        Set<UUID> previouslyTracked = new HashSet<>(lastMobTarget.keySet());
         for (UUID mobId : previouslyTracked) {
             if (!currentMobIds.contains(mobId)) {
+                Mob deadMob = lastMobRef.get(mobId);
+                String reason = (deadMob != null && deadMob.isDeadOrDying())
+                        ? "was dealt with"
+                        : "seems to have moved on";
                 lastMobTarget.remove(mobId);
-                if (Math.random() < 0.3) {
-                    long now = System.currentTimeMillis();
-                    if (now - lastThreatAlertMs.getOrDefault(mobId, 0L) >= 5000L) {
-                        lastThreatAlertMs.put(mobId, now);
-                        LLMClient.observe(npc, "the threat nearby seems to have passed.", level);
-                    }
+                lastMobRef.remove(mobId);
+                if (npcThreatState.getOrDefault(npcId, false) && Math.random() < 0.3) {
+                    LLMClient.observe(npc, "the threat nearby " + reason + ".", level);
                 }
             }
         }
@@ -181,6 +196,8 @@ public class ObservationTicker {
         lastSeen.remove(npcId);
         lastHostileMs.remove(npcId);
         lastPassiveMs.remove(npcId);
+        npcThreatState.remove(npcId);
+        lastThreatStateChangeMs.remove(npcId);
     }
 
     private static ServerPlayer findTarget(ServerLevel level, AssistantEntity npc, UUID npcId) {

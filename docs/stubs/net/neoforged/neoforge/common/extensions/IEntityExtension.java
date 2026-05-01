@@ -1,0 +1,42 @@
+﻿Compiled from "IEntityExtension.java"
+public interface net.neoforged.neoforge.common.extensions.IEntityExtension extends net.neoforged.neoforge.common.util.INBTSerializable<net.minecraft.nbt.CompoundTag> {
+  public default void deserializeNBT(net.minecraft.core.HolderLookup$Provider, net.minecraft.nbt.CompoundTag);
+  public default net.minecraft.nbt.CompoundTag serializeNBT(net.minecraft.core.HolderLookup$Provider);
+  public abstract java.util.Collection<net.minecraft.world.entity.item.ItemEntity> captureDrops();
+  public abstract java.util.Collection<net.minecraft.world.entity.item.ItemEntity> captureDrops(java.util.Collection<net.minecraft.world.entity.item.ItemEntity>);
+  public abstract net.minecraft.nbt.CompoundTag getPersistentData();
+  public default boolean shouldRiderSit();
+  public default net.minecraft.world.item.ItemStack getPickedResult(net.minecraft.world.phys.HitResult);
+  public default boolean canRiderInteract();
+  public default boolean canBeRiddenUnderFluidType(net.neoforged.neoforge.fluids.FluidType, net.minecraft.world.entity.Entity);
+  public abstract boolean canTrample(net.minecraft.world.level.block.state.BlockState, net.minecraft.core.BlockPos, float);
+  public default net.minecraft.world.entity.MobCategory getClassification(boolean);
+  public abstract boolean isAddedToLevel();
+  public abstract void onAddedToLevel();
+  public abstract void onRemovedFromLevel();
+  public abstract void revive();
+  public default boolean isMultipartEntity();
+  public default net.neoforged.neoforge.entity.PartEntity<?>[] getParts();
+  public abstract double getFluidTypeHeight(net.neoforged.neoforge.fluids.FluidType);
+  public abstract net.neoforged.neoforge.fluids.FluidType getMaxHeightFluidType();
+  public default boolean isInFluidType(net.minecraft.world.level.material.FluidState);
+  public default boolean isInFluidType(net.neoforged.neoforge.fluids.FluidType);
+  public default boolean isInFluidType(java.util.function.BiPredicate<net.neoforged.neoforge.fluids.FluidType, java.lang.Double>);
+  public abstract boolean isInFluidType(java.util.function.BiPredicate<net.neoforged.neoforge.fluids.FluidType, java.lang.Double>, boolean);
+  public abstract boolean isInFluidType();
+  public abstract net.neoforged.neoforge.fluids.FluidType getEyeInFluidType();
+  public default boolean isEyeInFluidType(net.neoforged.neoforge.fluids.FluidType);
+  public default boolean canStartSwimming();
+  public default double getFluidMotionScale(net.neoforged.neoforge.fluids.FluidType);
+  public default boolean isPushedByFluid(net.neoforged.neoforge.fluids.FluidType);
+  public default boolean canSwimInFluidType(net.neoforged.neoforge.fluids.FluidType);
+  public default boolean canFluidExtinguish(net.neoforged.neoforge.fluids.FluidType);
+  public default float getFluidFallDistanceModifier(net.neoforged.neoforge.fluids.FluidType);
+  public default boolean canHydrateInFluidType(net.neoforged.neoforge.fluids.FluidType);
+  public default net.minecraft.sounds.SoundEvent getSoundFromFluidType(net.neoforged.neoforge.fluids.FluidType, net.neoforged.neoforge.common.SoundAction);
+  public default boolean hasCustomOutlineRendering(net.minecraft.world.entity.player.Player);
+  public default void sendPairingData(net.minecraft.server.level.ServerPlayer, java.util.function.Consumer<net.minecraft.network.protocol.common.custom.CustomPacketPayload>);
+  public default void copyAttachmentsFrom(net.minecraft.world.entity.Entity, boolean);
+  public default void deserializeNBT(net.minecraft.core.HolderLookup$Provider, net.minecraft.nbt.Tag);
+  public default net.minecraft.nbt.Tag serializeNBT(net.minecraft.core.HolderLookup$Provider);
+}

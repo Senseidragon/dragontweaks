@@ -1,0 +1,18 @@
+﻿Compiled from "MinecoloniesTileEntities.java"
+public class com.minecolonies.api.tileentities.MinecoloniesTileEntities {
+  public static net.neoforged.neoforge.registries.DeferredHolder<net.minecraft.world.level.block.entity.BlockEntityType<?>, net.minecraft.world.level.block.entity.BlockEntityType<com.minecolonies.core.tileentities.TileEntityScarecrow>> SCARECROW;
+  public static net.neoforged.neoforge.registries.DeferredHolder<net.minecraft.world.level.block.entity.BlockEntityType<?>, net.minecraft.world.level.block.entity.BlockEntityType<com.minecolonies.core.tileentities.TileEntityPlantationField>> PLANTATION_FIELD;
+  public static net.neoforged.neoforge.registries.DeferredHolder<net.minecraft.world.level.block.entity.BlockEntityType<?>, net.minecraft.world.level.block.entity.BlockEntityType<com.minecolonies.core.tileentities.TileEntityBarrel>> BARREL;
+  public static net.neoforged.neoforge.registries.DeferredHolder<net.minecraft.world.level.block.entity.BlockEntityType<?>, net.minecraft.world.level.block.entity.BlockEntityType<com.minecolonies.core.tileentities.TileEntityColonyBuilding>> BUILDING;
+  public static net.neoforged.neoforge.registries.DeferredHolder<net.minecraft.world.level.block.entity.BlockEntityType<?>, net.minecraft.world.level.block.entity.BlockEntityType<com.minecolonies.core.tileentities.TileEntityDecorationController>> DECO_CONTROLLER;
+  public static net.neoforged.neoforge.registries.DeferredHolder<net.minecraft.world.level.block.entity.BlockEntityType<?>, net.minecraft.world.level.block.entity.BlockEntityType<com.minecolonies.core.tileentities.TileEntityRack>> RACK;
+  public static net.neoforged.neoforge.registries.DeferredHolder<net.minecraft.world.level.block.entity.BlockEntityType<?>, net.minecraft.world.level.block.entity.BlockEntityType<com.minecolonies.core.tileentities.TileEntityGrave>> GRAVE;
+  public static net.neoforged.neoforge.registries.DeferredHolder<net.minecraft.world.level.block.entity.BlockEntityType<?>, net.minecraft.world.level.block.entity.BlockEntityType<com.minecolonies.core.tileentities.TileEntityNamedGrave>> NAMED_GRAVE;
+  public static net.neoforged.neoforge.registries.DeferredHolder<net.minecraft.world.level.block.entity.BlockEntityType<?>, net.minecraft.world.level.block.entity.BlockEntityType<com.minecolonies.core.tileentities.TileEntityWareHouse>> WAREHOUSE;
+  public static net.neoforged.neoforge.registries.DeferredHolder<net.minecraft.world.level.block.entity.BlockEntityType<?>, net.minecraft.world.level.block.entity.BlockEntityType<com.minecolonies.core.tileentities.TileEntityCompostedDirt>> COMPOSTED_DIRT;
+  public static net.neoforged.neoforge.registries.DeferredHolder<net.minecraft.world.level.block.entity.BlockEntityType<?>, net.minecraft.world.level.block.entity.BlockEntityType<com.minecolonies.core.tileentities.TileEntityEnchanter>> ENCHANTER;
+  public static net.neoforged.neoforge.registries.DeferredHolder<net.minecraft.world.level.block.entity.BlockEntityType<?>, net.minecraft.world.level.block.entity.BlockEntityType<com.minecolonies.core.tileentities.TileEntityStash>> STASH;
+  public static net.neoforged.neoforge.registries.DeferredHolder<net.minecraft.world.level.block.entity.BlockEntityType<?>, net.minecraft.world.level.block.entity.BlockEntityType<com.minecolonies.core.tileentities.TileEntityColonyFlag>> COLONY_FLAG;
+  public static net.neoforged.neoforge.registries.DeferredHolder<net.minecraft.world.level.block.entity.BlockEntityType<?>, net.minecraft.world.level.block.entity.BlockEntityType<com.minecolonies.core.tileentities.TileEntityColonySign>> COLONY_SIGN;
+  public com.minecolonies.api.tileentities.MinecoloniesTileEntities();
+}

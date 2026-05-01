@@ -29,7 +29,7 @@ public class Config {
 
     public static final ModConfigSpec.IntValue NPC_OBSERVATION_HOSTILE_COOLDOWN_SECONDS = BUILDER
             .comment("Minimum seconds between hostile-entity observations per NPC")
-            .defineInRange("npcObservationHostileCooldownSeconds", 15, 5, 300);
+            .defineInRange("npcObservationHostileCooldownSeconds", 5, 5, 300);
 
     public static final ModConfigSpec.IntValue NPC_OBSERVATION_PASSIVE_COOLDOWN_SECONDS = BUILDER
             .comment("Minimum seconds between passive-entity observations per NPC")
