@@ -307,6 +307,8 @@ The Advisor and Planner roles make no sense as stationary entities — their val
 - Inside colony bounds, player moves far enough away that entity is stuck → entity teleports to player's current location (wolf teleport trigger).
 - Outside colony bounds, entity cannot reach player → entity returns to Town Hall and waits.
 
+**Colony boundary is the only MineColonies API dependency for shadow entity movement.** Sky visibility (`level.canSeeSky(BlockPos)`), pathfinding, and teleport fallback are all vanilla Minecraft. The boundary check — detecting when the player has crossed outside colony territory — is the one place the MineColonies API is required. Verify the correct `IColony` boundary query against stubs before writing that code. Advisor and Planner shadow entities must not exit the colony boundary; if the player exits, the shadow entity stops at the boundary and returns to Town Hall.
+
 **Town Hall as default anchor:** When not following, shadow entities return to Town Hall. This is the administrative center and the logical waiting location for an advisor or planner between active sessions with the player.
 
 **Pathfinding scope:** Pathfinding attempts are always constrained to sky-valid positions. The entity will attempt to walk around obstacles (e.g. walk around a building to reach a player who exited the back door) before resorting to teleport. Teleport is a last resort, not a primary movement mechanism.
