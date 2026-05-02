@@ -1,5 +1,5 @@
 # DragonTweaks — In-Game Verification Checklist & Decision Log
-*Last updated: 2026-05-01*
+*Last updated: 2026-05-02*
 
 Legend: ✅ Verified | ❌ Failed/Bug | ⚠️ Flagged | 🔲 Untested/Assumed | 🚫 Not built yet | 🔁 Deferred
 
@@ -156,6 +156,8 @@ These are to be completed before the citizen interaction work (Steps 4–7 in de
 4. **LLM hard requirement enforcement** — mod fails to start without valid API key
 5. **SavedData persistence smoke test** — write a role assignment, do a full JVM restart, confirm record survives. Must pass before proceeding to Step 4.
 6. **Flavor NPC behavior space design** — patrol, idle routines, event reactions (design session needed before implementation)
+
+> **Note:** Items involving MineColonies citizens (`CitizenJobChangedModEvent`, `CitizenDiedModEvent`, role revocation, slot enforcement) cannot be meaningfully tested until MineColonies integration work begins. These are tracked above for completeness but are not actionable until then.
 
 ---
 

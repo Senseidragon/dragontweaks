@@ -1,7 +1,7 @@
 # DragonTweaks — Current State Document
 *Replaces the original devchat.md as the active reference for Claude Code.*
 *Full session history archived in devchat_archive.md — do not delete.*
-*Last updated: 2026-05-01*
+*Last updated: 2026-05-02*
 
 ---
 
@@ -49,7 +49,6 @@ You execute one instruction at a time. After completing each instruction you STO
 | Request format | OpenAI messages array: `[{"role":"system","content":"..."},{"role":"user","content":"..."}]` |
 | max_tokens | 100 — always, never omit |
 | stream | false — always |
-| Thinking mode | `"reasoning": {"effort": "none"}` — disable thinking |
 
 LLM responses are immersion only — flavor text, not functional output. Game logic must never depend on response content. Fallback templates are always acceptable.
 
@@ -151,7 +150,7 @@ These items are small and targeted. Complete them in order before proceeding to 
 ### Step 5 — Network packets
 - Server → client: citizen name, citizen ID, slots used, slots max, role list.
 - Client → server: citizen ID, selected role name.
-- Verify correct NeoForge 1.21.1 packet registration pattern before writing.
+- NeoForge 1.21.1 packet registration pattern is known — verify against stubs before writing.
 
 ### Step 6 — Build `RoleAssignmentScreen.java`
 - Client-side only.
