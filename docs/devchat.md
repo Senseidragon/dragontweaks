@@ -262,9 +262,99 @@ Added a `NeoForge.EVENT_BUS.addListener` call in the `DragonTweaks` constructor.
 
 ---
 
+## Session Notes — 2026-05-02 — Design Ponder Session
+
+No code was written this session. This was a design review and decision session covering entity architecture, shadow entity behavior, and flavor NPC representation. All decisions below are locked unless explicitly revisited.
+
+### Follow/Stop mechanism — archived
+
+The follow/stop prototype in `AssistantEntity.java` has proven its concept but has no current production use case. Functional roles (Ranch Hand, Planner, Scout, Architect) are attached to MineColonies citizens whose movement must not be interfered with. The mechanism is not needed for stationary flavor NPCs either.
+
+**Decision:** Move follow/stop code to a test or archive folder. Do not delete — it has future value if a quest-style mechanic is ever built. Document clearly why it exists so it is not mistaken for dead code.
+
+### Citizen role tracking — confirmed approach
+
+Functional roles (Advisor, Planner, Ranch Hand, Scout) do not tag or modify MineColonies citizen entities in any way. We maintain our own UUID lists and write down citizen UUIDs internally. MineColonies citizens go about their work unmodified.
+
+### Flavor NPC visual representation — decided
+
+Flavor-only NPCs (e.g. Cranky Joe) will not use humanoid models. Reasons: no skin decision required, avoids uncanny villager face, visually legible without explanation.
+
+**Decision:** Use non-humanoid floating object entities. Examples: floating book and quill for Advisor, map or compass for Scout, agriculture-adjacent object for Ranch Hand. Exact model per role TBD at implementation time. The point is the object reads as intentional and characterful, not like a glitched item drop.
+
+Rendering must look intentional. Entity must have no default hostile or pathfinding behavior. Must not be an existing mob type that carries combat or physics baggage.
+
+### Flavor NPC movement — decided
+
+Stationary is easier but insufficient for immersion. Flavor NPCs should exhibit limited-area idle wandering within a small radius (approximately 3–5 blocks). This gives them a "living" quality without letting them wander somewhere stupid or get lost.
+
+When a player is speaking to a flavor NPC, it should use `LookAtPlayerGoal` with a proximity threshold so it faces the player during dialogue. An NPC staring at a fence post while being addressed breaks immersion.
+
+### Shadow entity system — Advisor and Planner roles
+
+The Advisor and Planner roles make no sense as stationary entities — their value is in active observation and answering questions. These roles will manifest as shadow entities: visible floating objects that auto-follow the player within colony bounds while the real MineColonies citizen goes about their normal work unaffected.
+
+**Visual:** Shadow entities are visible to the player. Their presence or absence is a passive signal — if your book disappears, you notice, and you know that role slot has opened back up. This is intentional passive UI feedback requiring no popup or notification.
+
+**Follow behavior:** Modeled on wolf follow behavior. Shadow entity pathfinds to follow the player at a respectful distance (approximately 3–4 blocks behind and slightly to the side, not directly behind). If blocked and unable to reach the player within a configurable timeout, it teleports to the player's location — same mechanic as Allays.
+
+**Sky visibility constraint:** Shadow entities may only occupy positions with unobstructed sky access. A raycast straight up from the entity's position must pass through only air, leaves, or other transparent natural blocks. Any crafted block (planks, stone bricks, glass, etc.) terminates the path and the entity stops there and waits. This naturally prevents shadow entities from entering buildings, going underground, or descending staircases. Natural overhangs and jungle canopy are permitted.
+
+**Timeout and retry:** If sky is blocked, retry on a short timer (10–20 seconds) before deciding the position is untenable and falling back. This prevents stranding on legitimate natural terrain features like cliff overhangs.
+
+**Colony boundary behavior:**
+- Inside colony bounds, player enters building → entity waits at last valid sky-access position (reads as "waiting at the door"). Reacquires player when player is detected outside.
+- Inside colony bounds, player moves far enough away that entity is stuck → entity teleports to player's current location (wolf teleport trigger).
+- Outside colony bounds, entity cannot reach player → entity returns to Town Hall and waits.
+
+**Town Hall as default anchor:** When not following, shadow entities return to Town Hall. This is the administrative center and the logical waiting location for an advisor or planner between active sessions with the player.
+
+**Pathfinding scope:** Pathfinding attempts are always constrained to sky-valid positions. The entity will attempt to walk around obstacles (e.g. walk around a building to reach a player who exited the back door) before resorting to teleport. Teleport is a last resort, not a primary movement mechanism.
+
+**Configuration:** Follow timeout before teleport must be a config value. Do not hardcode.
+
+### Quest system — parking lot
+
+A crude quest mechanic (NPC reports lost child → player finds child → escort back → reward) was identified as a theoretically valid use case for the follow/stop mechanism. This is noted for future consideration only. It is so far out of current scope that virtually any other feature takes priority. Do not plan or implement anything for this.
+
+### Ranch Hand — role design decisions
+
+The Ranch Hand is the only shadow entity role with real world-state side effects. It physically manipulates the world — applies leads, moves animals, attaches them to fence posts. This is not flavor text. All other shadow entities are advisory only.
+
+**Visual representation:** Floating lead or lasso. Immediately readable as "this thing catches animals." Fits the role without explanation.
+
+**Boundary behavior:** The Ranch Hand operates beyond colony bounds. Animals do not respect property lines. Operational radius extends a configurable distance beyond the colony boundary. Sky visibility constraint still applies — no cave diving.
+
+**Role as active utility:** The Ranch Hand does not report animal sightings to the player unprompted. It silently accumulates a sighting list as it wanders. When a player issues a fetch request, it consults the list to determine confidence ("I think I saw a cow recently, let me look" vs "Haven't seen one lately but I'll try").
+
+**Sighting memory — data structure:** A short TTL list of entries. Each entry contains: animal type, approximate XZ coordinates, timestamp in game ticks (`level.getGameTime()`). `getGameTime()` is a monotonic tick counter independent of day/night cycle, daylight gamerule, and any time-scaling mods. It is the correct clock for this purpose.
+
+**Sighting memory — dual eviction:**
+- **TTL eviction:** entries older than TTL_TICKS are stale and dropped on next list access. TTL target is approximately 10 real-time minutes expressed in ticks (approximately 12,000 ticks). Must be a config value.
+- **Cap eviction:** if the list exceeds the maximum entry count after adding a new sighting, the oldest entry is dropped (FIFO). Cap must be a config value. Suggested default: 8–10 entries.
+
+TTL handles quiet colonies where sightings are infrequent. Cap handles busy colonies and modded time environments where TTL alone may not bound list growth. Both mechanisms together ensure the list stays bounded under any server configuration.
+
+**Sighting memory — lazy cleanup:** No background cleanup pass. No scheduled task. Cleanup runs on write: when a new sighting is added, stale entries are swept first, then the new entry is appended, then cap eviction is applied if needed. One pass, all three jobs done.
+
+**Fetch decision logic:** When a player requests an animal type, the Ranch Hand checks its sighting list. If a fresh entry exists for that type, it expresses confidence and goes to look. If no fresh entry exists, it expresses uncertainty but goes anyway. If no relevant facility exists in the colony for that animal type (no cowherder hut for cows, no swineherd hut for pigs, etc.), the Ranch Hand will not attempt to catch that animal type at all — though it still records sightings of it in case a facility is built later.
+
+**Passive collection behavior:** The Ranch Hand acts as a "dog catcher" — it wanders the colony and extended buffer, and when it spots a stray animal for which a facility exists, it leashes it and delivers it to the nearest appropriate facility. It does not always route to the same facility — it routes to the nearest appropriate one relative to where the animal was found. Multiple cowherder huts split the load naturally.
+
+**Multi-animal handling:** When the Ranch Hand has an animal on a lead and spots another stray en route to a facility, it ignores the second animal for now and completes the current delivery first. No chain-leading. One animal at a time.
+
+**Facility loss mid-transit:** If the destination facility is destroyed or removed while the Ranch Hand is en route with a leashed animal, it releases the lead and resumes wandering. No stranded animal situation.
+
+**Wandering behavior:** The Ranch Hand meanders physically through the colony and extended buffer — it does not teleport between locations. This is intentional. Watching it walk an animal back across the colony reinforces that it is doing real work. It also means it surveys the colony organically as a byproduct of movement, feeding its sighting list without a dedicated patrol system.
+
+Wandering is guided, not dumb. The Ranch Hand biases its movement toward areas where it has previously seen animals and toward known facility locations (cowherder hut, swineherd hut, chicken coop, etc.), since animals tend to congregate near their assigned buildings. If it has been in a dead zone for a configurable period with no sightings, it selects a new destination weighted toward productive areas. It does not repeatedly wander the same empty corner hoping something shows up.
+
+---
+
 ## Known Deferred Items
 
 - NPC cross-awareness — low priority, revisit Phase 4
 - Shadow entity multiplayer visibility — test Phase 2
-- Ranch Hand max scan radius — test Phase 2
+- Ranch Hand max scan radius — resolved; Ranch Hand operates beyond colony bounds at a configurable buffer distance
 - Mod final name — TBD
+- Quest system — parking lot, no timeline
