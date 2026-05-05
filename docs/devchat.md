@@ -61,20 +61,20 @@ All source files are in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | File | Status | Notes |
 |---|---|---|
 | `AssistantCommand.java` | ✅ Complete | `/assistant` command handler |
-| `AssistantEntity.java` | ✅ Complete | NPC entity, follow/stop, proximity, role, NBT persistence |
+| `AssistantEntity.java` | ✅ Complete | NPC entity, follow/stop, proximity, role, NBT persistence; idle wander (WaterAvoidingRandomStrollGoal), LookAtPlayerGoal, and per-player greeting system added 2026-05-05 |
 | `AssistantRenderer.java` | ✅ Complete | Placeholder zombie renderer |
 | `AssistantRoleRecord.java` | ✅ Complete | Data record: citizenId (int), roleType, assignmentTimestamp, playerUUID, shadowEntityUUID — citizenId added 2026-04-30; shadowEntityUUID is intentional, do not remove |
 | `ChatInterceptor.java` | ✅ Complete | Intercepts player chat, routes to LLM, multi-NPC addressing |
 | `Config.java` | ✅ Complete | NeoForge ModConfigSpec. See Config section below. |
 | `ConversationMemory.java` | ✅ Complete | Per-NPC conversation history |
-| `DragonTweaks.java` | ✅ Complete | Main mod class, event bus registration — LevelEvent.Load handler added 2026-05-01 to wire RoleAssignmentData on overworld load |
+| `DragonTweaks.java` | ✅ Complete | Main mod class, event bus registration — LevelEvent.Load handler added 2026-05-01; MineColonies CitizenDiedModEvent and BuildingConstructionModEvent handlers added 2026-05-05, guarded by ModList.isLoaded check |
 | `DragonTweaksClient.java` | ✅ Complete | Client-only setup |
 | `DragonTweaksClientEvents.java` | ✅ Complete | Client event bus subscriber |
 | `EnvLoader.java` | ✅ Complete | Reads `.env` file for API key |
 | `FollowPlayerGoal.java` | ✅ Complete | AI goal for follow behavior |
 | `LLMClient.java` | ✅ Complete | OpenRouter async HTTP client |
 | `ModEntities.java` | ✅ Complete | Entity type registration |
-| `ObservationTicker.java` | ✅ Complete | Proactive NPC observations on server tick — 5 bugs fixed 2026-04-30, see Session Notes |
+| `ObservationTicker.java` | ✅ Complete | Proactive NPC observations on server tick — 5 bugs fixed 2026-04-30; greeting trigger loop, raid state-flip poll (IRaiderManager.isRaided()), and fireColonyEventObservation helper added 2026-05-05 |
 | `RolePersona.java` | ✅ Complete | Role keyword → persona block mapping |
 | `RoleAssignmentData.java` | ✅ Complete | SavedData for role assignments — file exists and is correct; updated 2026-04-30 to match AssistantRoleRecord signature |
 | `RoleAssignmentScreen.java` | ❌ Does not exist | Client-side role assignment UI |
@@ -90,8 +90,16 @@ Verify exact field names against source before referencing.
 - `LLM_ENDPOINT` — OpenRouter endpoint URL
 - `LLM_MODEL` — model string, default `google/gemma-4-26b-a4b-it`
 - `NPC_OBSERVATIONS_ENABLED` — boolean, default true
-- `NPC_OBSERVATION_HOSTILE_COOLDOWN_SECONDS` — int, default 15
-- `NPC_OBSERVATION_PASSIVE_COOLDOWN_SECONDS` — int, default 60
+- `NPC_OBSERVATION_HOSTILE_COOLDOWN_SECONDS` — int, default 5
+- `NPC_OBSERVATION_PASSIVE_COOLDOWN_SECONDS` — int, default 180
+- `ROLE_SLOTS` — int, default 3, range 1–8
+- `COMMAND_PROXIMITY` — int, default 10, range 4–32
+- `NPC_AWARENESS_RADIUS` — int, default 16, range 4–64
+- `NPC_AWARENESS_CATEGORY` — String, default "PASSIVE"
+- `LLM_ENABLED` — boolean, default true
+- `LLM_TIMEOUT_SECONDS` — int, default 90, range 5–180
+- `FLAVOR_NPC_GREETING_CHANCE` — double, default 0.07, range 0.0–1.0
+- `FLAVOR_NPC_GREETING_COOLDOWN_TICKS` — int, default 12000, range 1200–144000
 
 **Does not exist yet — to be added:**
 - *(none — `COMMAND_RADIUS` was eliminated; detection radius and command radius are the same value, read from existing detection config. Do not add a separate COMMAND_RADIUS entry.)*
