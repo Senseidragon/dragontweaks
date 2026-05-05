@@ -1,6 +1,9 @@
 package io.github.senseidragon.dragontweaks;
 
+import com.minecolonies.api.colony.IColony;
+import com.minecolonies.api.colony.IColonyManager;
 import net.minecraft.network.chat.Component;
+import net.neoforged.fml.ModList;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -27,6 +30,9 @@ public class ObservationTicker {
     private static final Map<UUID, Long> lastThreatStateChangeMs = new HashMap<>();
     private static final Map<UUID, Mob> lastMobRef = new HashMap<>();
 
+    // Per-colony raid state for flip detection: colonyId → was raided last tick
+    private static final Map<Integer, Boolean> colonyRaidState = new HashMap<>();
+
     private static int tickCounter = 0;
     private static final int TICK_INTERVAL = 100;
 
@@ -45,6 +51,34 @@ public class ObservationTicker {
                 for (AssistantEntity npc : level.getEntitiesOfClass(AssistantEntity.class, box)) {
                     if (visited.add(npc)) checkThreats(level, npc);
                 }
+            }
+        }
+
+        // Greeting trigger — fire tryGreetPlayer for each player within COMMAND_PROXIMITY of each NPC
+        double greetRadius = Config.COMMAND_PROXIMITY.get().doubleValue();
+        for (ServerLevel level : server.getAllLevels()) {
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                if (player.serverLevel() != level) continue;
+                AABB greetBox = AABB.ofSize(player.position(), greetRadius * 2, greetRadius * 2, greetRadius * 2);
+                for (AssistantEntity npc : level.getEntitiesOfClass(AssistantEntity.class, greetBox)) {
+                    npc.tryGreetPlayer(player, level);
+                }
+            }
+        }
+
+        // Raid poll — detect flip from not-raided to raided per colony
+        if (ModList.get().isLoaded("minecolonies")) for (ServerLevel level : server.getAllLevels()) {
+            for (IColony colony : IColonyManager.getInstance().getColonies(level)) {
+                int colonyId = colony.getID();
+                boolean isRaided = colony.getRaiderManager().isRaided();
+                boolean wasRaided = colonyRaidState.getOrDefault(colonyId, false);
+                colonyRaidState.put(colonyId, isRaided);
+
+                if (!isRaided || wasRaided) continue;
+
+                // Raid just started — fire observation for each NPC with a player nearby
+                String prompt = "raiders are attacking the colony! Sound the alarm in character.";
+                fireColonyEventObservation(server, level, prompt);
             }
         }
 
@@ -190,6 +224,22 @@ public class ObservationTicker {
         String id = entity.getType().getDescriptionId();
         String[] parts = id.split("\\.");
         return parts[parts.length - 1].replace("_", " ");
+    }
+
+    static void fireColonyEventObservation(MinecraftServer server, ServerLevel level, String prompt) {
+        double proximity = Config.COMMAND_PROXIMITY.get().doubleValue();
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (player.serverLevel() != level) continue;
+            AABB box = AABB.ofSize(player.position(), proximity * 2, proximity * 2, proximity * 2);
+            for (AssistantEntity npc : level.getEntitiesOfClass(AssistantEntity.class, box)) {
+                Component nameComponent = npcNameComponent(npc);
+                String timeOfDay = LLMClient.timeOfDay(level.getDayTime());
+                String weather = LLMClient.weather(level.isRaining(), level.isThundering());
+                String surroundings = LLMClient.scanSurroundings(level, npc);
+                LLMClient.observe(server, player, nameComponent, npc.getRole(),
+                        timeOfDay, weather, surroundings, prompt, npc.getUUID());
+            }
+        }
     }
 
     public static void clearState(UUID npcId) {

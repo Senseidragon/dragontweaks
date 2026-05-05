@@ -1,12 +1,17 @@
 package io.github.senseidragon.dragontweaks;
 
+import com.minecolonies.api.IMinecoloniesAPI;
+import com.minecolonies.api.eventbus.events.colony.buildings.BuildingConstructionModEvent;
+import com.minecolonies.api.eventbus.events.colony.citizens.CitizenDiedModEvent;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
@@ -43,5 +48,24 @@ public class DragonTweaks {
                 "DragonTweaks: No OpenRouter API key found. Set your key in the .env file.");
         }
         LOGGER.info("DragonTweaks loaded — LLM endpoint: {}", Config.LLM_ENDPOINT.get());
+
+        event.enqueueWork(() -> {
+            if (!ModList.get().isLoaded("minecolonies")) return;
+
+            IMinecoloniesAPI.getInstance().getEventBus().subscribe(CitizenDiedModEvent.class, e -> {
+                if (!(e.getColony().getWorld() instanceof ServerLevel level)) return;
+                String citizenName = e.getCitizen().getName();
+                String prompt = citizenName + " has died. React with grief or shock in character.";
+                ObservationTicker.fireColonyEventObservation(level.getServer(), level, prompt);
+            });
+
+            IMinecoloniesAPI.getInstance().getEventBus().subscribe(BuildingConstructionModEvent.class, e -> {
+                if (!(e.getColony().getWorld() instanceof ServerLevel level)) return;
+                String buildingName = e.getBuilding().getBuildingType().getTranslationKey();
+                Component buildingDisplay = Component.translatable(buildingName);
+                String prompt = "the " + buildingDisplay.getString() + " has just finished construction. React with excitement or pride in character.";
+                ObservationTicker.fireColonyEventObservation(level.getServer(), level, prompt);
+            });
+        });
     }
 }

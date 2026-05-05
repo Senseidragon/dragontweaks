@@ -51,6 +51,14 @@ public class Config {
             .comment("Seconds to wait for an LLM response before falling back to templates")
             .defineInRange("llmTimeoutSeconds", 90, 5, 180);
 
+    public static final ModConfigSpec.DoubleValue FLAVOR_NPC_GREETING_CHANCE = BUILDER
+            .comment("Chance (0.0–1.0) that a flavor NPC fires a greeting when a player enters detection range")
+            .defineInRange("flavorNpcGreetingChance", 0.07, 0.0, 1.0);
+
+    public static final ModConfigSpec.IntValue FLAVOR_NPC_GREETING_COOLDOWN_TICKS = BUILDER
+            .comment("Per-NPC, per-player cooldown in ticks before a greeting can fire again for the same player")
+            .defineInRange("flavorNpcGreetingCooldownTicks", 12000, 1200, 144000);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     static void onLoad(ModConfigEvent event) {

@@ -5,21 +5,28 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
+import net.minecraft.world.entity.ai.goal.WaterAvoidingRandomStrollGoal;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 public class AssistantEntity extends PathfinderMob {
 
     private String role = "villager";
     private boolean following = false;
+    private final Map<UUID, Long> greetingCooldowns = new HashMap<>();
 
     public AssistantEntity(EntityType<? extends AssistantEntity> type, Level level) {
         super(type, level);
@@ -81,9 +88,30 @@ public class AssistantEntity extends PathfinderMob {
         }
     }
 
+    public void tryGreetPlayer(ServerPlayer player, ServerLevel level) {
+        UUID playerUUID = player.getUUID();
+        if (level.getGameTime() < greetingCooldowns.getOrDefault(playerUUID, 0L)) return;
+        if (level.random.nextDouble() >= Config.FLAVOR_NPC_GREETING_CHANCE.get()) return;
+
+        greetingCooldowns.put(playerUUID, level.getGameTime() + Config.FLAVOR_NPC_GREETING_COOLDOWN_TICKS.get());
+
+        String timeOfDay = LLMClient.timeOfDay(level.getDayTime());
+        String weather = LLMClient.weather(level.isRaining(), level.isThundering());
+        String surroundings = LLMClient.scanSurroundings(level, this);
+        Component nameComponent = this.getCustomName() != null ? this.getCustomName() : Component.literal("Assistant");
+        String playerName = player.getGameProfile().getName();
+        String greetingPrompt = playerName + " has just come within earshot. Greet them in character, considering it is " + timeOfDay + " and the weather is " + weather + ".";
+
+        LLMClient.observe(level.getServer(), player, nameComponent, role,
+                timeOfDay, weather, surroundings, greetingPrompt, this.getUUID());
+    }
+
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(1, new FollowPlayerGoal(this, 1.0, 5.0F, 3.0F));
+        this.goalSelector.addGoal(8, new WaterAvoidingRandomStrollGoal(this, 0.6));
+        this.goalSelector.addGoal(9, new LookAtPlayerGoal(this, Player.class,
+                Config.COMMAND_PROXIMITY.get().floatValue(), 0.02f));
     }
 
     public static AttributeSupplier createAttributes() {
