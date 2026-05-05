@@ -169,6 +169,7 @@ public class AssistantCommand {
         }
 
         nearest.setFollowing(follow);
+        if (!follow) nearest.setHomePosition(nearest.blockPosition());
         String entityName = nearest.getCustomName() != null ? nearest.getCustomName().getString() : "Assistant";
         String verb = follow ? "following." : "stopped.";
         ctx.getSource().sendSuccess(() -> Component.literal(entityName + " is now " + verb), false);
@@ -202,6 +203,7 @@ public class AssistantCommand {
         }
 
         nearest.setFollowing(follow);
+        if (!follow) nearest.setHomePosition(nearest.blockPosition());
         String verb = follow ? "following." : "stopped.";
         String entityName = nearest.getCustomName().getString();
         ctx.getSource().sendSuccess(() -> Component.literal(entityName + " is now " + verb), false);

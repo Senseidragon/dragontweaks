@@ -59,6 +59,10 @@ public class Config {
             .comment("Per-NPC, per-player cooldown in ticks before a greeting can fire again for the same player")
             .defineInRange("flavorNpcGreetingCooldownTicks", 12000, 1200, 144000);
 
+    public static final ModConfigSpec.IntValue FLAVOR_NPC_WANDER_RADIUS = BUILDER
+            .comment("Radius in blocks within which a flavor NPC may wander from its spawn anchor")
+            .defineInRange("flavorNpcWanderRadius", 5, 2, 20);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     static void onLoad(ModConfigEvent event) {
