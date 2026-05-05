@@ -80,10 +80,6 @@ public class ChatInterceptor {
                 ? target.getCustomName()
                 : Component.literal("Assistant [PoC]");
 
-            player.sendSystemMessage(
-                Component.literal("[").append(entityName).append("]: Hmm...")
-            );
-
             DragonTweaks.LOGGER.info("[ChatInterceptor] {} -> {}: {}",
                 player.getGameProfile().getName(),
                 entityName.getString(),

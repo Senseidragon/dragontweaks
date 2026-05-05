@@ -37,6 +37,11 @@ public class DragonTweaks {
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
+        String apiKey = EnvLoader.get("OPENROUTER_API_KEY");
+        if (apiKey == null || apiKey.isBlank() || apiKey.equals("your-api-key-here")) {
+            throw new IllegalStateException(
+                "DragonTweaks: No OpenRouter API key found. Set your key in the .env file.");
+        }
         LOGGER.info("DragonTweaks loaded — LLM endpoint: {}", Config.LLM_ENDPOINT.get());
     }
 }

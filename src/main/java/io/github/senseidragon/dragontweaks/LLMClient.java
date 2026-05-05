@@ -213,7 +213,9 @@ public class LLMClient {
 
         String npcName = entityName.getString();
         String playerName = player.getGameProfile().getName();
-        String systemPrompt = buildSystemPrompt(npcName, role, playerName, timeOfDay, weather, surroundings);
+        String locale = AssistantCommand.localeOverride != null ? AssistantCommand.localeOverride : "en_us";
+        String systemPrompt = buildSystemPrompt(npcName, role, playerName, timeOfDay, weather, surroundings)
+                + "Always respond in the language identified by locale code: " + locale + ".\n";
         String userContent = "You just noticed: " + whatChanged +
                              ". React in character in 1-2 short sentences. Address " + playerName + " directly.";
         String requestBody = buildRequestBody(Config.LLM_MODEL.get(), userContent, systemPrompt);
@@ -262,11 +264,13 @@ public class LLMClient {
 
         String npcName = entityName.getString();
         String playerName = player.getGameProfile().getName();
+        String locale = AssistantCommand.localeOverride != null ? AssistantCommand.localeOverride : "en_us";
         String history = ConversationMemory.getHistory(npcId, playerName);
         String userContent = history.isEmpty()
             ? playerName + " says: " + message
             : "[Prior conversation:]\n" + history + "\n\n" + playerName + " says: " + message;
-        String systemPrompt = buildSystemPrompt(npcName, role, playerName, timeOfDay, weather, surroundings);
+        String systemPrompt = buildSystemPrompt(npcName, role, playerName, timeOfDay, weather, surroundings)
+                + "Always respond in the language identified by locale code: " + locale + ".\n";
         String requestBody = buildRequestBody(Config.LLM_MODEL.get(), userContent, systemPrompt);
 
         HttpRequest request;

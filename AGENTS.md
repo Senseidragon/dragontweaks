@@ -67,3 +67,9 @@ The mod follows a typical Minecraft modding architecture but includes a speciali
 
 ### Verification
 - Always use `./gradlew clean build` to ensure a clean state before verification.
+
+## Security Rules
+
+- **Never hardcode API keys, tokens, or secrets in any tracked file** (`.ps1`, `.sh`, `.java`, configs, etc.). Always read credentials from `run/.env` at runtime.
+- `run/.env` is gitignored and must never be committed.
+- If a script needs a credential, use the same pattern as `claude_gemma.ps1`: parse `KEY=value` from `run/.env` at runtime.

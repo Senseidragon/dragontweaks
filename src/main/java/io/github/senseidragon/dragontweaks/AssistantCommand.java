@@ -13,11 +13,16 @@ import net.minecraft.world.phys.AABB;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
 @EventBusSubscriber(modid = DragonTweaks.MODID)
 public class AssistantCommand {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(AssistantCommand.class);
+    public static String localeOverride = null;
 
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
@@ -50,6 +55,15 @@ public class AssistantCommand {
                     .executes(ctx -> setFollowStateNearest(ctx, false))
                     .then(Commands.argument("name", StringArgumentType.greedyString())
                         .executes(ctx -> setFollowState(ctx, StringArgumentType.getString(ctx, "name"), false))
+                    )
+                )
+                .then(Commands.literal("locale")
+                    .executes(ctx -> reportLocale(ctx))
+                    .then(Commands.literal("reset")
+                        .executes(ctx -> resetLocale(ctx))
+                    )
+                    .then(Commands.argument("code", StringArgumentType.string())
+                        .executes(ctx -> setLocale(ctx, StringArgumentType.getString(ctx, "code")))
                     )
                 )
         );
@@ -191,6 +205,34 @@ public class AssistantCommand {
         String verb = follow ? "following." : "stopped.";
         String entityName = nearest.getCustomName().getString();
         ctx.getSource().sendSuccess(() -> Component.literal(entityName + " is now " + verb), false);
+        return 1;
+    }
+
+    private static int reportLocale(CommandContext<CommandSourceStack> ctx) {
+        if (localeOverride == null) {
+            ctx.getSource().sendSuccess(() -> Component.literal("No locale override set."), false);
+        } else {
+            ctx.getSource().sendSuccess(() -> Component.literal("Active locale override: " + localeOverride), false);
+        }
+        return 1;
+    }
+
+    private static int resetLocale(CommandContext<CommandSourceStack> ctx) {
+        localeOverride = null;
+        ctx.getSource().sendSuccess(() -> Component.literal("Locale override cleared. Using en_us."), false);
+        return 1;
+    }
+
+    private static int setLocale(CommandContext<CommandSourceStack> ctx, String code) {
+        String normalized = code.toLowerCase();
+        if (!normalized.matches("[a-z]{2}_[a-z]{2}")) {
+            LOGGER.warn("Invalid locale code '{}' — falling back to en_us", code);
+            localeOverride = "en_us";
+        } else {
+            localeOverride = normalized;
+        }
+        final String active = localeOverride;
+        ctx.getSource().sendSuccess(() -> Component.literal("Locale override set to: " + active), false);
         return 1;
     }
 

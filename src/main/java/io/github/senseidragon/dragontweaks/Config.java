@@ -33,7 +33,7 @@ public class Config {
 
     public static final ModConfigSpec.IntValue NPC_OBSERVATION_PASSIVE_COOLDOWN_SECONDS = BUILDER
             .comment("Minimum seconds between passive-entity observations per NPC")
-            .defineInRange("npcObservationPassiveCooldownSeconds", 60, 15, 600);
+            .defineInRange("npcObservationPassiveCooldownSeconds", 180, 15, 600);
 
     public static final ModConfigSpec.BooleanValue LLM_ENABLED = BUILDER
             .comment("Enable LLM-backed responses via OpenRouter. If false, all responses use template fallbacks")

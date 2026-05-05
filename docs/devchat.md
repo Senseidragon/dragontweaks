@@ -134,11 +134,11 @@ Neither `DragonTweaks.java` nor `AssistantCommand.java` contained any reference 
 
 These items are small and targeted. Complete them in order before proceeding to Step 4.
 
-1. **`/assistant locale [code]`** — debug command; injects locale string into session context; unrecognized codes fall back to `en_us` with logged warning; `/assistant locale reset` clears override. See Locale architectural decision in verification checklist.
-2. **Observation ticker idle cooldown tuning** — increase passive comment interval. Config value change only — no logic changes.
-3. **"Hmm..." refactor** — remove as standard acknowledgment; retain only as timeout fallback.
-4. **LLM hard requirement enforcement** — mod fails to start without valid API key.
-5. **SavedData persistence smoke test** — write a role assignment via command or console, do a full JVM restart, confirm the record survives. Not yet done. Must pass before proceeding to Step 4.
+1. ~~**`/assistant locale [code]`**~~ ✅ Done — confirmed working in-game. Locale override fires correctly, Maxine switched to Spanish on `es_es`. `/assistant locale reset` clears override correctly.
+2. ~~**Observation ticker idle cooldown tuning**~~ ✅ Code change done — config value only, no logic changes. Needs in-game test to confirm feel is correct.
+3. ~~**"Hmm..." refactor**~~ ✅ Done — confirmed absent from all source files via search. Fallback path already in place: `sendFallback()` in `LLMClient.java` lines 163–168, wired to `exceptionally` block at lines 296–300.
+4. ~~**LLM hard requirement enforcement**~~ ✅ Done — startup check exists in `DragonTweaks.java` `commonSetup()` at lines 40–44. Checks null, blank, and placeholder key value. Throws `IllegalStateException` with clear message on failure.
+5. ~~**SavedData persistence smoke test**~~ — Moot. No command currently writes to `RoleAssignmentData`. Write path does not exist until Steps 4–7 are complete. Not a blocker for Step 4.
 
 ### Step 4 — Build `CitizenInteractDetector.java`
 - Verify correct NeoForge 1.21.1 event for player→entity right-click before writing.
