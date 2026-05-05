@@ -60,8 +60,8 @@ All source files are in `src/main/java/io/github/senseidragon/dragontweaks/`.
 
 | File | Status | Notes |
 |---|---|---|
-| `AssistantCommand.java` | ✅ Complete | `/assistant` command handler |
-| `AssistantEntity.java` | ✅ Complete | NPC entity, follow/stop, proximity, role, NBT persistence; idle wander (WaterAvoidingRandomStrollGoal), LookAtPlayerGoal, and per-player greeting system added 2026-05-05 |
+| `AssistantCommand.java` | ✅ Complete | `/assistant` command handler — stop command now calls setHomePosition() to anchor wander radius at current position (commit 1335c95) |
+| `AssistantEntity.java` | ✅ Complete | NPC entity, follow/stop, proximity, role, NBT persistence; idle wander (WaterAvoidingRandomStrollGoal), LookAtPlayerGoal, and per-player greeting system added 2026-05-05; wander radius constraint via restrictTo() and MoveTowardsRestrictionGoal added 2026-05-05 (commit 1335c95) |
 | `AssistantRenderer.java` | ✅ Complete | Placeholder zombie renderer |
 | `AssistantRoleRecord.java` | ✅ Complete | Data record: citizenId (int), roleType, assignmentTimestamp, playerUUID, shadowEntityUUID — citizenId added 2026-04-30; shadowEntityUUID is intentional, do not remove |
 | `ChatInterceptor.java` | ✅ Complete | Intercepts player chat, routes to LLM, multi-NPC addressing |
@@ -100,6 +100,7 @@ Verify exact field names against source before referencing.
 - `LLM_TIMEOUT_SECONDS` — int, default 90, range 5–180
 - `FLAVOR_NPC_GREETING_CHANCE` — double, default 0.07, range 0.0–1.0
 - `FLAVOR_NPC_GREETING_COOLDOWN_TICKS` — int, default 12000, range 1200–144000
+- `FLAVOR_NPC_WANDER_RADIUS` — int, default 5, range 2–20
 
 **Does not exist yet — to be added:**
 - *(none — `COMMAND_RADIUS` was eliminated; detection radius and command radius are the same value, read from existing detection config. Do not add a separate COMMAND_RADIUS entry.)*
