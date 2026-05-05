@@ -353,6 +353,55 @@ Wandering is guided, not dumb. The Ranch Hand biases its movement toward areas w
 
 ---
 
+## Session Notes — 2026-05-05 — Flavor NPC Behavior Design Session
+
+No code was written this session. This was a dedicated design session for Tier 2 flavor NPC behavior. All decisions below are locked unless explicitly revisited.
+
+### What flavor NPCs are
+
+Flavor NPCs are purely ambient and immersive. They do not functionally interact with the world in any way. Their purpose is to make the colony feel alive — through wandering, reacting to events, and responding to player chat. Cranky Joe is the reference implementation and is a complete, correct example of this tier.
+
+### Movement
+
+- Idle wandering within a ~3–5 block radius is always active regardless of player proximity
+- `LookAtPlayerGoal` activates when a player enters detection range, so the NPC faces the player during interaction
+- No patrol routes, no waypoint navigation — idle wandering is sufficient and intentional
+
+### Greeting Behavior
+
+- When a player enters detection range, the NPC makes a single roll at a configurable chance (default 5–10%, config value) to fire a greeting
+- Greeting is generated via LLM and must be appropriate to current time of day and weather
+- Cooldown is **per-NPC, per-player** — each player has an independent cooldown tracked on the NPC
+- Cooldown duration is a config value (suggested default: ~12,000 ticks, approximately 10 real minutes)
+- Player may leave and re-enter detection range freely during cooldown — no re-roll until cooldown expires for that player
+- Global cooldown (shared across all players) is explicitly rejected — it makes the NPC appear to ignore other players for no reason
+
+### LLM Call Rule — Universal
+
+LLM calls of any kind (greeting, event reaction, chat response) only fire when at least one player is within detection range of the NPC. No player nearby = no LLM calls. Idle wandering continues regardless. This is consistent with the existing ObservationTicker silent-drop pattern.
+
+### Colony Event Reactions
+
+Flavor NPCs may react to MineColonies colony events for immersive commentary. Reactions are LLM-generated and subject to the universal LLM call rule above.
+
+**Events flavor NPCs react to (initial set):**
+- Raid started
+- Citizen death
+- Building construction complete
+
+All other events are deferred. No functional response to any event — commentary only.
+
+### Config Values Required
+
+| Config Key | Type | Suggested Default | Notes |
+|---|---|---|---|
+| `FLAVOR_NPC_GREETING_CHANCE` | float | 0.07 (7%) | Roll on player entering detection range |
+| `FLAVOR_NPC_GREETING_COOLDOWN_TICKS` | int | 12000 | Per-NPC, per-player cooldown |
+
+Both values must be in `Config.java`. Never hardcode.
+
+---
+
 ## Known Deferred Items
 
 - NPC cross-awareness — low priority, revisit Phase 4
