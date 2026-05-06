@@ -45,7 +45,7 @@ public class Config {
 
     public static final ModConfigSpec.ConfigValue<String> LLM_MODEL = BUILDER
             .comment("OpenRouter model to use for LLM responses")
-            .define("llmModel", "google/gemma-2-27b-it");
+            .define("llmModel", "google/gemma-4-26b-a4b-it");
 
     public static final ModConfigSpec.IntValue LLM_TIMEOUT_SECONDS = BUILDER
             .comment("Seconds to wait for an LLM response before falling back to templates")
