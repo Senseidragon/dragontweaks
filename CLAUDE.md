@@ -163,3 +163,21 @@ Built JAR ends up in `build/libs/`. Mod metadata is injected at build time from 
 ****ObservationTicker:** Fires every 100 ticks (`TICK_INTERVAL = 100`). Guarded by `NPC_OBSERVATIONS_ENABLED`. Silent-drop pattern: if no qualifying player is in range, no LLM call is made and no error is logged. Greeting trigger and raid poll both run on this same interval.
 
 **Greeting system:** Per-player cooldown tracked as `Map<UUID, Long>` on `AssistantEntity`. Roll fires on player entering detection range. Only fires if player is within `COMMAND_PROXIMITY`. Uses plain AABB check — not `findTarget()` — because greeting fires before ConversationMemory history exists.
+
+---
+
+## Session Closeout — Required on Every Task Completion
+
+After completing any task that touches source files, config, or project structure:
+
+1. Update `devchat.md`:
+   - Set the `Last updated` date at the top to today's date
+   - Update the file table (`What Exists Right Now`) to reflect any files added, removed, or changed
+   - Add a session note under `Session Notes` summarizing what was done and any decisions made
+   - If a design decision was locked, add it to `Design Decisions — Locked`
+
+2. If the task completed a step in `What To Build Next`, strike it through and mark it ✅ Done with a brief note.
+
+3. If `./gradlew build` passed, update `dragontweaks_verification_checklist.md` to reflect any newly verified behaviors.
+
+Do not skip this step. Do not mark a task complete without doing this first.
