@@ -1,7 +1,7 @@
 # DragonTweaks — Current State Document
 *Replaces the original devchat.md as the active reference for Claude Code.*
 *Full session history archived in devchat_archive.md — do not delete.*
-*Last updated: 2026-05-06*
+*Last updated: 2026-05-07*
 
 ---
 
@@ -65,14 +65,14 @@ All source files are in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `AssistantRenderer.java` | ✅ Complete | Placeholder zombie renderer |
 | `AssistantRoleRecord.java` | ✅ Complete | Data record: citizenId (int), roleType, assignmentTimestamp, playerUUID, shadowEntityUUID — citizenId added 2026-04-30; shadowEntityUUID is intentional, do not remove |
 | `ChatInterceptor.java` | ✅ Complete | Intercepts player chat, routes to LLM, multi-NPC addressing |
-| `Config.java` | ✅ Complete | NeoForge ModConfigSpec. See Config section below. |
+| `Config.java` | ✅ Complete | NeoForge ModConfigSpec. See Config section below. ADVISOR_COMMUTE_THRESHOLD, ADVISOR_HAPPINESS_THRESHOLD_RED, ADVISOR_HAPPINESS_THRESHOLD_YELLOW added 2026-05-07. |
 | `ConversationMemory.java` | ✅ Complete | Per-NPC conversation history |
 | `DragonTweaks.java` | ✅ Complete | Main mod class, event bus registration — LevelEvent.Load handler added 2026-05-01; MineColonies CitizenDiedModEvent and BuildingConstructionModEvent handlers added 2026-05-05, guarded by ModList.isLoaded check; CitizenInteractDetector registered 2026-05-06 |
 | `DragonTweaksClient.java` | ✅ Complete | Client-only setup |
 | `DragonTweaksClientEvents.java` | ✅ Complete | Client event bus subscriber |
 | `EnvLoader.java` | ✅ Complete | Reads `.env` file for API key |
 | `FollowPlayerGoal.java` | ✅ Complete | AI goal for follow behavior |
-| `LLMClient.java` | ✅ Complete | OpenRouter async HTTP client |
+| `LLMClient.java` | ✅ Complete | OpenRouter async HTTP client — `{"reasoning":{"effort":"none"}}` added to request body 2026-05-07 |
 | `ModEntities.java` | ✅ Complete | Entity type registration |
 | `ObservationTicker.java` | ✅ Complete | Proactive NPC observations on server tick — 5 bugs fixed 2026-04-30; greeting trigger loop, raid state-flip poll (IRaiderManager.isRaided()), and fireColonyEventObservation helper added 2026-05-05 |
 | `RolePersona.java` | ✅ Complete | Role keyword → persona block mapping |
@@ -101,6 +101,9 @@ Verify exact field names against source before referencing.
 - `FLAVOR_NPC_GREETING_CHANCE` — double, default 0.07, range 0.0–1.0
 - `FLAVOR_NPC_GREETING_COOLDOWN_TICKS` — int, default 12000, range 1200–144000
 - `FLAVOR_NPC_WANDER_RADIUS` — int, default 5, range 2–20
+- `ADVISOR_COMMUTE_THRESHOLD` — int, default 80, range 10–500
+- `ADVISOR_HAPPINESS_THRESHOLD_RED` — double, default 0.5, range 0.0–1.0
+- `ADVISOR_HAPPINESS_THRESHOLD_YELLOW` — double, default 0.9, range 0.0–1.0
 
 **Does not exist yet — to be added:**
 - *(none — `COMMAND_RADIUS` was eliminated; detection radius and command radius are the same value, read from existing detection config. Do not add a separate COMMAND_RADIUS entry.)*
@@ -806,6 +809,21 @@ All other events are deferred. No functional response to any event — commentar
 | `FLAVOR_NPC_GREETING_COOLDOWN_TICKS` | int | 12000 | Per-NPC, per-player cooldown |
 
 Both values must be in `Config.java`. Never hardcode.
+
+---
+
+## Session Notes — 2026-05-07 — Config additions and LLMClient reasoning disable
+
+Added three config values to `Config.java`:
+- `ADVISOR_COMMUTE_THRESHOLD` — int, default 80, range 10–500. Drives commute flag in Advisor panel.
+- `ADVISOR_HAPPINESS_THRESHOLD_RED` — double, default 0.5, range 0.0–1.0. Factor below this = red.
+- `ADVISOR_HAPPINESS_THRESHOLD_YELLOW` — double, default 0.9, range 0.0–1.0. Factor below this (but ≥ red) = yellow.
+
+Threshold defaults from V2 resolution in open_questions_log.md: red < 0.5, yellow 0.5–0.9, healthy ≥ 0.9.
+
+Added `{"reasoning": {"effort": "none"}}` to `buildRequestBody()` in `LLMClient.java` after the `stream` property. Confirmed syntax from OpenRouter docs (V5 resolution). `JsonObject reasoning` constructed inline using existing Gson `JsonObject` pattern already in the file.
+
+Build clean.
 
 ---
 

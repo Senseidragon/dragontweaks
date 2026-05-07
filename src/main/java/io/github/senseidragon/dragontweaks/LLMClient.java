@@ -157,6 +157,9 @@ public class LLMClient {
         obj.add("messages", messages);
         obj.addProperty("max_tokens", MAX_RESPONSE_TOKENS);
         obj.addProperty("stream", false);
+        JsonObject reasoning = new JsonObject();
+        reasoning.addProperty("effort", "none");
+        obj.add("reasoning", reasoning);
         return GSON.toJson(obj);
     }
 

@@ -63,6 +63,18 @@ public class Config {
             .comment("Radius in blocks within which a flavor NPC may wander from its spawn anchor")
             .defineInRange("flavorNpcWanderRadius", 5, 2, 20);
 
+    public static final ModConfigSpec.IntValue ADVISOR_COMMUTE_THRESHOLD = BUILDER
+            .comment("Commute distance in blocks above which a citizen's commute is flagged in the Advisor panel")
+            .defineInRange("advisorCommuteThreshold", 80, 10, 500);
+
+    public static final ModConfigSpec.DoubleValue ADVISOR_HAPPINESS_THRESHOLD_RED = BUILDER
+            .comment("Happiness factor value below which a factor is classified as red (severe)")
+            .defineInRange("advisorHappinessThresholdRed", 0.5, 0.0, 1.0);
+
+    public static final ModConfigSpec.DoubleValue ADVISOR_HAPPINESS_THRESHOLD_YELLOW = BUILDER
+            .comment("Happiness factor value below which a factor is classified as yellow (mild); must be above red threshold")
+            .defineInRange("advisorHappinessThresholdYellow", 0.9, 0.0, 1.0);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     static void onLoad(ModConfigEvent event) {
