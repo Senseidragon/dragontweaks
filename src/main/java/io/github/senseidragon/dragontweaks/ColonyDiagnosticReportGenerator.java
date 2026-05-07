@@ -37,9 +37,7 @@ public class ColonyDiagnosticReportGenerator {
         // Colony metadata
         String colonyName = colony.getName();
         int citizenCount = colony.getCitizenManager().getCurrentCitizenCount();
-        // TODO: getMaxCitizens() is research-based citizen cap, not strict bed count.
-        // No verified API for raw bed count — using this as housing cap proxy.
-        int housingCap = colony.getCitizenManager().getMaxCitizens();
+        int housingCap = countBedCapacity(colony);
         int townHallLevel = colony.getServerBuildingManager().hasTownHall()
                 ? colony.getServerBuildingManager().getTownHall().getBuildingLevel()
                 : 0;
@@ -263,5 +261,22 @@ public class ColonyDiagnosticReportGenerator {
             return ColonyDiagnosticReport.RootCause.HOME_TOO_FAR_FROM_WORK;
         }
         return ColonyDiagnosticReport.RootCause.UNKNOWN;
+    }
+
+    // TODO: Verify translation key substrings ("residence", ".home", "tavern") against
+    // MineColonies 1.21.1 sources before relying on these. No per-building bed-count API
+    // verified in stubs. Known bed values: Residence=2, Tavern=4.
+    private static int countBedCapacity(IColony colony) {
+        int beds = 0;
+        for (IBuilding building : colony.getServerBuildingManager().getBuildings().values()) {
+            if (!building.isBuilt()) continue;
+            String key = building.getBuildingType().getTranslationKey().toLowerCase(java.util.Locale.ROOT);
+            if (key.contains("residence") || key.contains(".home")) {
+                beds += 2;
+            } else if (key.contains("tavern")) {
+                beds += 4;
+            }
+        }
+        return beds;
     }
 }

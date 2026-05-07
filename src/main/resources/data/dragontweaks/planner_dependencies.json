@@ -9,7 +9,8 @@
       "university_level_required": 0,
       "depends_on": [],
       "building_prereqs": [],
-      "notes": "No dependencies. Required to start a colony."
+      "auto_satisfied": true,
+      "notes": "Town Hall is self-placed by the player — colony cannot exist without it. Always treated as complete."
     },
     {
       "id": "builders_hut",

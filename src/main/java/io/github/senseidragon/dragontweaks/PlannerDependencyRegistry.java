@@ -108,6 +108,7 @@ public class PlannerDependencyRegistry {
         @SerializedName("university_level_required") int universityLevelRequired;
         @SerializedName("depends_on") List<String> dependsOn;
         @SerializedName("building_prereqs") List<JsonBuildingPrereq> buildingPrereqs;
+        @SerializedName("auto_satisfied") boolean autoSatisfied;
         String notes;
     }
 
@@ -124,6 +125,7 @@ public class PlannerDependencyRegistry {
     private final Map<String, List<BuildingPrereq>> prereqsByNodeId = new LinkedHashMap<>();
     private final Map<String, String> aliasToId = new LinkedHashMap<>();
     private final Map<String, List<DependencyStep>> chainCache = new LinkedHashMap<>();
+    private final Set<String> autoSatisfiedIds = new LinkedHashSet<>();
 
     // -------------------------------------------------------------------------
     // Public API
@@ -145,6 +147,11 @@ public class PlannerDependencyRegistry {
     public List<DependencyStep> getChain(String buildingId) {
         List<DependencyStep> chain = chainCache.get(buildingId);
         return chain != null ? chain : Collections.emptyList();
+    }
+
+    /** Returns true if the building is always treated as complete (e.g. townhall). */
+    public boolean isAutoSatisfied(String buildingId) {
+        return autoSatisfiedIds.contains(buildingId);
     }
 
     public MatchResult findMatches(String input) {
@@ -221,6 +228,7 @@ public class PlannerDependencyRegistry {
             );
             nodeById.put(jn.id, node);
             prereqsByNodeId.put(jn.id, prereqs);
+            if (jn.autoSatisfied) autoSatisfiedIds.add(jn.id);
 
             aliasToId.put(jn.id, jn.id);
             for (String alias : aliases) {

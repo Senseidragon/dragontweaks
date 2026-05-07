@@ -229,6 +229,12 @@ public class PlannerPanelPayload {
     // Factory
     // -------------------------------------------------------------------------
 
+    /** Network deserialization path — constructs directly from received fields. */
+    static PlannerPanelPayload fromNetwork(Mode mode, WorkerHeader workerHeader, BedHeader bedHeader,
+                                          List<Recommendation> recommendations, GoalResult goalResult) {
+        return new PlannerPanelPayload(mode, workerHeader, bedHeader, recommendations, goalResult);
+    }
+
     public static PlannerPanelPayload build(IColony colony, String goalInput) {
         if (goalInput == null) {
             return buildSnapshot(colony);
@@ -384,6 +390,9 @@ public class PlannerPanelPayload {
     // Recommendation generation
     // -------------------------------------------------------------------------
 
+    // Buildings that may legitimately need multiple instances; skip the already-built check for these.
+    private static final Set<String> CAPACITY_DRIVEN = Set.of("residence", "guard_tower");
+
     private static List<Recommendation> generateRecommendations(
             IColony colony,
             ColonyDiagnosticReport report,
@@ -462,6 +471,14 @@ public class PlannerPanelPayload {
             List<ChainStep> annotatedChain = buildChainSteps(rawChain, builtTypes, totalLevels, researchTree);
             int stepsRemaining = (int) annotatedChain.stream().filter(s -> !s.completed).count();
 
+            // Skip if the target building is already built and all chain steps are satisfied.
+            // Capacity-driven buildings (residence, guard_tower) are exempt — multiple instances are valid.
+            ResourceLocation targetRl = resolveRegistryId(buildingId);
+            boolean targetAlreadyBuilt = targetRl != null && builtTypes.contains(targetRl);
+            if (targetAlreadyBuilt && stepsRemaining == 0 && !CAPACITY_DRIVEN.contains(buildingId)) {
+                continue;
+            }
+
             ChainStep firstIncomplete = annotatedChain.stream()
                     .filter(s -> !s.completed)
                     .findFirst()
@@ -538,6 +555,8 @@ public class PlannerPanelPayload {
 
         switch (step.stepType) {
             case BUILDING: {
+                // Auto-satisfied buildings (e.g. townhall) are always complete — colony cannot exist without them.
+                if (PlannerDependencyRegistry.getInstance().isAutoSatisfied(step.id)) return true;
                 ResourceLocation rl = resolveRegistryId(step.id);
                 return rl != null && builtTypes.contains(rl);
             }
