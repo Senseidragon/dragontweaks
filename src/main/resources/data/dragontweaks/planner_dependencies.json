@@ -1,0 +1,209 @@
+{
+  "version": 1,
+  "buildings": [
+    {
+      "id": "townhall",
+      "display_name": "Town Hall",
+      "aliases": ["townhall", "town hall", "th"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": [],
+      "building_prereqs": [],
+      "notes": "No dependencies. Required to start a colony."
+    },
+    {
+      "id": "builders_hut",
+      "display_name": "Builder's Hut",
+      "aliases": ["builder", "builder's hut", "builders hut"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["townhall"],
+      "building_prereqs": [],
+      "notes": "Must be first build after Town Hall. Builder builds their own hut first."
+    },
+    {
+      "id": "residence",
+      "display_name": "Residence",
+      "aliases": ["residence", "house", "home"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["builders_hut"],
+      "building_prereqs": [],
+      "notes": "No research gate. Provides beds."
+    },
+    {
+      "id": "warehouse",
+      "display_name": "Warehouse",
+      "aliases": ["warehouse", "storage"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["builders_hut"],
+      "building_prereqs": [],
+      "notes": "No research gate. Required for colony automation."
+    },
+    {
+      "id": "courier_post",
+      "display_name": "Courier's Post",
+      "aliases": ["courier", "courier's post", "couriers post", "deliveryman"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["warehouse"],
+      "building_prereqs": [],
+      "notes": "Requires Warehouse. Enables item hauling."
+    },
+    {
+      "id": "guard_tower",
+      "display_name": "Guard Tower",
+      "aliases": ["guard tower", "guard", "tower"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["builders_hut"],
+      "building_prereqs": [],
+      "notes": "No research gate at base level."
+    },
+    {
+      "id": "tavern",
+      "display_name": "Tavern",
+      "aliases": ["tavern", "inn"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["builders_hut"],
+      "building_prereqs": [],
+      "notes": "No research gate. Provides beds and attracts new citizens."
+    },
+    {
+      "id": "university",
+      "display_name": "University",
+      "aliases": ["university", "uni"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["builders_hut"],
+      "building_prereqs": [],
+      "notes": "No research gate. Required for all research-locked buildings."
+    },
+    {
+      "id": "forester",
+      "display_name": "Forester's Hut",
+      "aliases": ["forester", "forester's hut", "foresters hut", "lumberjack"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["builders_hut"],
+      "building_prereqs": [],
+      "notes": "No research gate. Must reach level 3 total before Woodwork research unlocks."
+    },
+    {
+      "id": "sawmill",
+      "display_name": "Sawmill",
+      "aliases": ["sawmill"],
+      "research_required": "minecolonies:technology/woodwork",
+      "university_level_required": 1,
+      "depends_on": ["university"],
+      "building_prereqs": [
+        { "building_id": "forester", "min_total_level": 3 }
+      ],
+      "notes": "Verified chain. Woodwork research requires University L1 + Forester total level 3."
+    },
+    {
+      "id": "fletcher",
+      "display_name": "Fletcher's Hut",
+      "aliases": ["fletcher", "fletcher's hut", "fletchers hut"],
+      "research_required": "minecolonies:technology/stringwork",
+      "university_level_required": 2,
+      "depends_on": ["sawmill"],
+      "building_prereqs": [],
+      "notes": "Verified chain. Stringwork requires University L2 + Woodwork completed."
+    },
+    {
+      "id": "miner",
+      "display_name": "Miner's Hut",
+      "aliases": ["miner", "miner's hut", "miners hut", "mine"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["builders_hut"],
+      "building_prereqs": [],
+      "notes": "No research gate. Must reach level 3 total before Hitting Iron research unlocks."
+    },
+    {
+      "id": "blacksmith",
+      "display_name": "Blacksmith's Hut",
+      "aliases": ["blacksmith", "blacksmith's hut", "blacksmiths hut"],
+      "research_required": "minecolonies:technology/hittingiron",
+      "university_level_required": 1,
+      "depends_on": ["university"],
+      "building_prereqs": [
+        { "building_id": "miner", "min_total_level": 3 }
+      ],
+      "notes": "Verified chain. Hitting Iron requires University L1 + Miner total level 3 + 1x Anvil."
+    },
+    {
+      "id": "farmer",
+      "display_name": "Farm",
+      "aliases": ["farm", "farmer", "farmer's hut", "farmers hut"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["builders_hut"],
+      "building_prereqs": [],
+      "notes": "No research gate."
+    },
+    {
+      "id": "fisher",
+      "display_name": "Fisher's Hut",
+      "aliases": ["fisher", "fisher's hut", "fishers hut", "fishing"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["builders_hut"],
+      "building_prereqs": [],
+      "notes": "No research gate."
+    },
+    {
+      "id": "cook",
+      "display_name": "Cook's Hut",
+      "aliases": ["cook", "cook's hut", "cooks hut", "restaurant"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["builders_hut"],
+      "building_prereqs": [],
+      "notes": "No research gate. Required for food production and citizen feeding."
+    },
+    {
+      "id": "school",
+      "display_name": "School",
+      "aliases": ["school"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["builders_hut"],
+      "building_prereqs": [],
+      "notes": "No research gate. Required for child citizen happiness."
+    },
+    {
+      "id": "library",
+      "display_name": "Library",
+      "aliases": ["library"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["builders_hut"],
+      "building_prereqs": [],
+      "notes": "No research gate. Boosts citizen skill training."
+    },
+    {
+      "id": "hospital",
+      "display_name": "Hospital",
+      "aliases": ["hospital", "healer"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["builders_hut"],
+      "building_prereqs": [],
+      "notes": "UNVERIFIED: Research gate unverified. Chain marked incomplete — verify before shipping."
+    },
+    {
+      "id": "mystical_site",
+      "display_name": "Mystical Site",
+      "aliases": ["mystical site", "mystical"],
+      "research_required": null,
+      "university_level_required": 0,
+      "depends_on": ["builders_hut"],
+      "building_prereqs": [],
+      "notes": "UNVERIFIED: Research gate and full chain unverified. Marked incomplete."
+    }
+  ]
+}

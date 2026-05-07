@@ -1,7 +1,7 @@
 # DragonTweaks — Current State Document
 *Replaces the original devchat.md as the active reference for Claude Code.*
 *Full session history archived in devchat_archive.md — do not delete.*
-*Last updated: 2026-05-07*
+*Last updated: 2026-05-07 (session 8)*
 
 ---
 
@@ -79,6 +79,14 @@ All source files are in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `RoleAssignmentData.java` | ✅ Complete | SavedData for role assignments — file exists and is correct; updated 2026-04-30 to match AssistantRoleRecord signature |
 | `RoleAssignmentScreen.java` | ❌ Does not exist | Client-side role assignment UI |
 | `CitizenInteractDetector.java` | ✅ Complete | PlayerInteractEvent.EntityInteract handler — citizen check, null-safe ICitizenData retrieval, isAssigned guard, dynamic TH-level slot cap, event cancel + debug log; RoleAssignmentScreen stub only (TODO comment); added 2026-05-06 |
+| `PlannerDependencyRegistry.java` | ✅ Complete | Singleton. Loads `planner_dependencies.json` from classpath at commonSetup. Resolves dependency graph DFS into pre-computed per-building chains. Public: `getChain(String)`, `findMatches(String)` returning `MatchResult` with exact and substring suggestion lists. Added 2026-05-07. |
+| `ColonyDiagnosticCache.java` | ✅ Complete | Per-colony cache wrapping ColonyDiagnosticReport. TTL 30s. Static `getOrGenerate(IColony)` + `invalidate(int colonyId)`. Added 2026-05-07. |
+| `AdvisorThrottleData.java` | ✅ Complete | SavedData. Stores fired throttle keys as Set<String>. Keys: `"{colonyId}:{citizenId}:{colonyDay}"` (citizen) or `"{colonyId}:systemic:{pattern}:{colonyDay}"`. Attached to overworld level. Added 2026-05-07. |
+| `AdvisorDiagnosticLoop.java` | ✅ Complete | Tick-driven Observe→Diagnose loop. 600-tick interval + dirty flag per colony. Async via CompletableFuture. Throttle check + player delivery on main thread via server.execute(). LLM fired via LLMClient.observe(). Added 2026-05-07. |
+| `AdvisorPanelPayload.java` | ✅ Complete | Server-side data preparation class. Static `build(IColony)` calls `ColonyDiagnosticCache.getOrGenerate()` and assembles payload: environmental flags, systemic pattern (nullable), colony summary header, citizen list ordered red→yellow→healthy with alpha within tiers. Per-citizen collapsed fields (name, worst factor ID+value, tier severity, additional complaints badge, commute flag) and expanded fields (all 10 canonical factors with value+modifier label, commute distance+threshold). Reads three threshold config keys at runtime. Added 2026-05-07. |
+| `PlannerPanelPayload.java` | ✅ Complete | Server-side data preparation class. Static `build(IColony, String goalInput)`. Snapshot mode (goalInput null): calls ColonyDiagnosticCache, computes WorkerHeader and BedHeader, generates Recommendation list ordered crisis-first then shortest-chain. Goal input mode: calls PlannerDependencyRegistry.findMatches()+getChain(), annotates each ChainStep completed/firstIncomplete, builds CostEstimate (stepsRemaining + research names). Per-step completion verified via BuildingEntry.getRegistryName() matching against BUILDING_HOLDERS map (DeferredHolder.getId()), and ILocalResearchTree.isComplete() for RESEARCH steps. In-progress annotation via claimed BUILD/UPGRADE work orders matched to building types. Materials list empty pending per-building material API verification; getMatchingItemStacksInWarehouse() call pattern documented in TODO comment. Added 2026-05-07. |
+| `AdvisorPanelScreen.java` | ✅ Complete | Client-side GUI (`@OnlyIn(Dist.CLIENT)`). Extends `Screen`. Constructor takes `AdvisorPanelPayload`. Renders: environmental warnings banner (conditional, amber), systemic pattern banner (conditional, dark red), colony summary header (happiness + citizen count/housing cap), paginated citizen list (5 items/page, Prev/Close/Next nav buttons). Per-citizen collapsed row: severity dot, expand arrow, name, worst factor+value, +N additional complaints badge, [far] commute flag. Per-citizen expanded section: all 10 canonical factors with value+severity dot+modifier type label, commute line with threshold comparison. Expand/collapse state persists per citizen index until panel closes (cleared in onClose). mouseClicked() tracks accumulated y through expanded rows to correctly hit-test header rows. renderables iterated directly (public final field) after custom content — renderBackground() called once, super.render() not called. All class names verified against NeoForge 1.21.1 sources. Build clean. Added 2026-05-07. |
+| `PlannerPanelScreen.java` | ✅ Complete | Client-side GUI (`@OnlyIn(Dist.CLIENT)`). Extends `Screen`. Constructor takes `PlannerPanelPayload` + nullable `Consumer<String> goalCallback`. `updatePayload()` for packet-driven refresh. Snapshot mode: worker/bed header strip, paginated recommendations (3/page) each showing crisis badge `[!]/[ ]`, target name, `[In Progress]` annotation, immediate blocker, inline research prereq, worker/bed constraint lines, steps remaining. Goal input mode: EditBox at top, Enter intercepted in `keyPressed()` (InputConstants.KEY_RETURN=257), calls `goalCallback`. On exact match: cost estimate block (steps remaining + research names), collapsible materials list (defaulted collapsed, `matsToggleY` field tracks toggle row for mouseClicked), paginated dependency chain (8/page) with ✓ greyed completed steps, ► highlighted first incomplete, plain white remaining. On no match: "Did you mean" suggestions or "No suggestions found." — never blank. All class names (Screen, Button, EditBox, GuiGraphics, InputConstants) verified against NeoForge 1.21.1 sources. Build clean. Added 2026-05-07. |
 
 ---
 
@@ -809,6 +817,132 @@ All other events are deferred. No functional response to any event — commentar
 | `FLAVOR_NPC_GREETING_COOLDOWN_TICKS` | int | 12000 | Per-NPC, per-player cooldown |
 
 Both values must be in `Config.java`. Never hardcode.
+
+---
+
+## Session Notes — 2026-05-07 (session 8) — PlannerPanelScreen
+
+Created `PlannerPanelScreen.java` — client-side GUI extending `Screen`. Constructor takes `PlannerPanelPayload` (initial) and nullable `Consumer<String> goalCallback`. `updatePayload()` is a public method for the eventual packet handler to push new data without reopening the screen.
+
+**Panel: 324×270.** Layout (top to bottom): title → "Goal:" label + EditBox (full-width minus label) → worker/bed header strip (snapshot only) → scissor-clipped content area → Prev/Close/Next nav row.
+
+**Snapshot mode:** worker/bed header strip always visible when mode=SNAPSHOT. Recommendations paginated 3/page. Each rec card: separator line, `[!]`/`[ ]` priority badge, target name, `[In Progress]` annotation (blue, right-aligned). Conditional lines: immediate blocker (yellow, ▸ prefix), research prereq (blue), worker slot constraint (red), bed delta constraint (red), steps remaining (grey). Crisis badge is red; non-crisis is grey.
+
+**Goal input mode — Enter handling:** `keyPressed()` checks `keyCode == InputConstants.KEY_RETURN` (verified value 257 against decompiled `InputConstants.java`) and `goalInput.isFocused()`. EditBox does not handle Enter itself. `goalCallback.accept(text)` fires if callback non-null. Safe pattern — works regardless of whether EditBox internally consumes Enter.
+
+**Goal input mode — exact match:** Cost estimate block (steps remaining + research names, inline). Materials collapsible toggle row defaulted collapsed. `matsToggleY` field set during render() each frame; `mouseClicked()` reads it to detect toggle clicks. Dependency chain paginated 8/page: completed steps grey+✓, first incomplete yellow+►, remaining white+indent.
+
+**Goal input mode — no match:** "No match: <input>" in red, then "Did you mean:" with suggestion list or "No suggestions found." — never blank per spec.
+
+**All class names verified against NeoForge 1.21.1 decompiled gradle cache:** `Screen`, `Button` (builder pattern), `EditBox` (6-param constructor confirmed), `GuiGraphics` (fill/drawString/enableScissor confirmed), `InputConstants` (KEY_RETURN=257). Build clean.
+
+---
+
+## Session Notes — 2026-05-07 (session 7) — AdvisorPanelScreen
+
+Created `AdvisorPanelScreen.java` — client-side GUI extending `Screen`. Constructor takes `AdvisorPanelPayload`. No server calls, no network: pure display of pre-built payload data.
+
+**Panel layout (304×250, centered):** title → environmental banner (conditional) → systemic pattern banner (conditional) → colony summary header → scissor-clipped citizen list → Prev/Close/Next nav row.
+
+**Environmental banner:** amber `0xEE663300`, shown when `payload.getEnvironmentalFlags()` is non-empty. Lists flag names inline, appends "data may be unreliable".
+
+**Systemic pattern banner:** dark red `0xEE550011`, shown when `payload.getSystemicPattern()` is non-null. One banner maximum (payload already resolved highest-severity winner). Three pattern labels mapped from `ColonyDiagnosticReport.SystemicPattern` enum.
+
+**Colony summary header:** overall happiness (color-coded red/yellow/green) and citizen count / housing cap on one line.
+
+**Citizen list:** `enableScissor()`/`disableScissor()` on `[listTop, listBottom]`. 5 items per page (ITEMS_PER_PAGE constant). Per-citizen collapsed row (16px): severity dot, `>` or `v` arrow, name (truncated at 14 chars), worst factor id+value, `+N` badge, `[far]` commute flag. Per-citizen expanded section: 10 factor lines (10px each) each with severity dot+id+value+modifier label, then commute line (threshold comparison with color). Expand state stored in `Set<Integer>` keyed by citizen list index; cleared in `onClose()`.
+
+**mouseClicked():** calls `super.mouseClicked()` first (button delegation), then walks accumulated y through current page's citizen rows (accounting for expanded sections) to hit-test header rows only. Click on header row toggles expand.
+
+**Render pattern:** `renderBackground()` called once → custom content drawn → `this.renderables` iterated directly (field is `public final` on `Screen`) to render buttons on top. `super.render()` not called to avoid double `renderBackground()`.
+
+**NeoForge 1.21.1 class names verified against gradle-cached decompiled sources:**
+- `Screen` → `net.minecraft.client.gui.screens.Screen`
+- `Button` → `net.minecraft.client.gui.components.Button` with `Button.builder().bounds().build()` pattern
+- `GuiGraphics` → `net.minecraft.client.gui.GuiGraphics` — `fill()`, `drawString()`, `drawCenteredString()`, `enableScissor()`, `disableScissor()` all confirmed
+- `renderBackground(GuiGraphics, int, int, float)` — 4-param signature confirmed
+- `renderables` — `public final List<Renderable>` on `Screen`
+
+Build clean.
+
+---
+
+## Session Notes — 2026-05-07 (session 6) — PlannerPanelPayload
+
+Created `PlannerPanelPayload.java` — pure server-side data preparation class. Static `build(IColony colony, String goalInput)`.
+
+**Snapshot mode** (`goalInput == null`): calls `ColonyDiagnosticCache.getOrGenerate()`. Builds `WorkerHeader` (workersAssigned = built buildings with non-null assignedWorker; totalSlots = all built buildings — approximate, no verified API for exact worker-slot capacity). Builds `BedHeader` from `report.getCitizenCount()` and `report.getHousingCap()`. Generates `List<Recommendation>` from global red factors and housing shortage check. Ordered crisis-first then by `stepsRemaining` ascending.
+
+**Recommendation fields**: `targetId`, `targetDisplayName`, `priority` (CRISIS/NON_CRISIS), `immediateBlocker` (first incomplete step description), `researchPrereqName` (null unless research is the blocker), `workerSlotsNeeded` (1 if worker slots full), `bedDelta` (1 if beds full and recommendation is for residence), `stepsRemaining`, `inProgress` (claimed BUILD/UPGRADE work order for that building type).
+
+**Goal input mode** (`goalInput != null`): calls `PlannerDependencyRegistry.findMatches()` then `getChain()`. Annotates each `ChainStep` with `completed` and `firstIncomplete` flags. Builds `CostEstimate` (count of incomplete steps + names of incomplete RESEARCH steps). `GoalResult` carries exact matches, suggestions, chain, cost estimate, materials, `hasWarehouse`.
+
+**Step completion verified APIs**:
+- BUILDING: `IBuilding.getBuildingType().getRegistryName()` matched against `BUILDING_HOLDERS` map (DeferredHolder.getId() — confirmed in DeferredHolder stub)
+- BUILDING_PREREQ: total level sum from `getBuildingTotalLevels()` vs step.minTotalLevel
+- RESEARCH: `ILocalResearchTree.isComplete(ResourceLocation)` — confirmed in ILocalResearchTree stub
+
+**In-progress check**: `colony.getWorkManager().getWorkOrders()` → filter claimed BUILD/UPGRADE → `colony.getServerBuildingManager().getBuildings().get(wo.getLocation())` → match registry name.
+
+**BUILDING_HOLDERS map**: 20 entries mapping JSON node IDs to ModBuildings DeferredHolder fields. Fields verified against ModBuildings stub (confirmed: townHall, builder, home, wareHouse, deliveryman, guardTower, tavern, university, lumberjack, sawmill, fletcher, miner, blacksmith, farmer, fisherman, cook, school, library, hospital, mysticalSite). TODO: verify ResourceLocation paths in-game.
+
+**Materials list**: empty pending per-building material requirements API verification and player parameter. Call pattern for `getMatchingItemStacksInWarehouse(Predicate<ItemStack>)` documented in TODO comment in `buildMaterialsList()`.
+
+Build clean.
+
+---
+
+## Session Notes — 2026-05-07 (session 5) — AdvisorPanelPayload
+
+Created `AdvisorPanelPayload.java` — pure server-side data preparation class. No rendering, no GUI, no client code. Single static `build(IColony colony)` method. Calls `ColonyDiagnosticCache.getOrGenerate(colony)` then assembles the payload.
+
+Payload contents: `List<EnvironmentalFlag>` from report, `SystemicPattern` (null if none detected), colony summary (overall happiness, citizen count, housing cap), `List<CitizenEntry>` ordered red tier first, then yellow, then healthy, alphabetical by name within each tier.
+
+`CitizenEntry` carries: `tier` (Severity enum driving order), `name`, `worstFactorId`, `worstFactorValue`, `additionalComplaintsCount` (flagged factors minus worst already shown), `commuteFlagged` (distance > `ADVISOR_COMMUTE_THRESHOLD`), plus expanded: `List<FactorDetail>` in canonical 10-factor order, `commuteDistance`, `commuteThreshold`.
+
+`FactorDetail` carries: `factorId`, `value`, `severity`, `modifierTypeLabel` from static map (Static/TimeBased/ExpirationBased per spec table).
+
+Citizen tier logic per spec: RED if any factor red or commute flagged; YELLOW if any factor yellow (no red, no commute flag); HEALTHY otherwise.
+
+Threshold reads at call-time from `Config.ADVISOR_HAPPINESS_THRESHOLD_RED.get()`, `Config.ADVISOR_HAPPINESS_THRESHOLD_YELLOW.get()`, `Config.ADVISOR_COMMUTE_THRESHOLD.get()`. No hardcoded values.
+
+Build clean.
+
+---
+
+## Session Notes — 2026-05-07 (session 4) — AdvisorDiagnosticLoop
+
+Created `AdvisorThrottleData.java` — NeoForge SavedData attached to the overworld level. Stores a `Set<String>` of fired throttle keys persisted across sessions. Keys: `"{colonyId}:{citizenId}:{colonyDay}"` for per-citizen, `"{colonyId}:systemic:{patternType}:{colonyDay}"` for systemic patterns. `hasFired(key)` / `markFired(key)` are the public API. Pattern follows `RoleAssignmentData` exactly.
+
+Created `AdvisorDiagnosticLoop.java` — server-side tick listener registered on `NeoForge.EVENT_BUS`. Checks each colony every 600 ticks (30s) OR when `markDirty(colonyId)` is called. Guards with `ModList.isLoaded("minecolonies")`. Player-in-colony check (via `isCoordInColony`) on main thread before going async. Async path: `CompletableFuture.runAsync()` calls `ColonyDiagnosticCache.getOrGenerate()`, evaluates systemic pattern vs per-citizen diagnosis, builds LLM prompt. Returns to main thread via `server.execute()` for throttle check (`AdvisorThrottleData`), player re-lookup, throttle marking, and `LLMClient.observe()` call. Advisor identity: deterministic UUID per colony from `UUID.nameUUIDFromBytes`. No Advisor entity needed — colony-level proxy.
+
+Updated `DragonTweaks.java`: registered `AdvisorDiagnosticLoop::onServerTick`. Added `AdvisorDiagnosticLoop.markDirty()` alongside existing `ColonyDiagnosticCache.invalidate()` in all four MineColonies event handlers. Extracted `colonyId` local variable in each handler to avoid double-calling `getColony().getID()`.
+
+Build clean.
+
+---
+
+## Session Notes — 2026-05-07 (session 3) — ColonyDiagnosticCache
+
+Created `ColonyDiagnosticCache.java`. Static class with `ConcurrentHashMap<Integer, CacheEntry>` keyed by colony ID. TTL is 30 seconds (hardcoded constant — no config key specified). `getOrGenerate(IColony)` checks staleness and calls `ColonyDiagnosticReportGenerator.generate(colony)` on miss. `invalidate(int colonyId)` removes the entry.
+
+Registered four invalidation handlers in `DragonTweaks.java` inside the existing `enqueueWork` block (already guarded by `ModList.isLoaded("minecolonies")`):
+- `CitizenDiedModEvent` — merged with existing LLM observation handler (one subscriber, invalidation runs before the world-cast guard)
+- `BuildingConstructionModEvent` — merged with existing LLM observation handler
+- `CitizenJobChangedModEvent` — new subscriber, invalidation only
+- `CitizenAddedModEvent` — new subscriber, invalidation only
+
+Verified `CitizenJobChangedModEvent` and `CitizenAddedModEvent` package paths against stubs: both at `com.minecolonies.api.eventbus.events.colony.citizens.*`. `getColony()` confirmed on `AbstractColonyModEvent` base class. Build clean.
+
+---
+
+## Session Notes — 2026-05-07 (session 2) — PlannerDependencyRegistry
+
+Created `src/main/resources/data/dragontweaks/planner_dependencies.json` with the full 20-building seed data from `planner_dependency_data_spec_v0_1.md`. Created `PlannerDependencyRegistry.java` as a singleton that loads the JSON at mod startup, resolves the dependency graph depth-first into pre-computed per-building chains, and exposes `getChain(String buildingId)` and `findMatches(String input)`. Registered `PlannerDependencyRegistry.load()` as the first call in `DragonTweaks.commonSetup()`. Build clean.
+
+Chain resolution algorithm: DFS post-order with a visited set (cycle-safe). For each building with `building_prereqs`, the prereq building's chain is resolved first, then a `BUILDING_PREREQ` annotation step (level requirement) is inserted, then the `RESEARCH` step, then the building itself. All chains pre-cached at load time.
+
+`findMatches`: exact match via normalized alias map; if no exact match, substring scan over all ids and aliases for "did you mean" suggestions.
 
 ---
 

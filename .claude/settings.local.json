@@ -60,7 +60,9 @@
       "Bash(grep -v '^$')",
       "Bash(javap -p \"net/neoforged/neoforge/event/tick/ServerTickEvent.class\")",
       "Bash(unzip *)",
-      "Bash(xargs cat *)"
+      "Bash(xargs cat *)",
+      "WebSearch",
+      "WebFetch(domain:openrouter.ai)"
     ]
   }
 }

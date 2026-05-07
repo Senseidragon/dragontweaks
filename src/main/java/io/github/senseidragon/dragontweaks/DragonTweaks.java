@@ -2,7 +2,9 @@ package io.github.senseidragon.dragontweaks;
 
 import com.minecolonies.api.IMinecoloniesAPI;
 import com.minecolonies.api.eventbus.events.colony.buildings.BuildingConstructionModEvent;
+import com.minecolonies.api.eventbus.events.colony.citizens.CitizenAddedModEvent;
 import com.minecolonies.api.eventbus.events.colony.citizens.CitizenDiedModEvent;
+import com.minecolonies.api.eventbus.events.colony.citizens.CitizenJobChangedModEvent;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 
@@ -39,10 +41,13 @@ public class DragonTweaks {
         NeoForge.EVENT_BUS.addListener(CitizenInteractDetector::onEntityInteract);
         NeoForge.EVENT_BUS.addListener(ChatInterceptor::onServerChat);
         NeoForge.EVENT_BUS.addListener(ObservationTicker::onServerTick);
+        NeoForge.EVENT_BUS.addListener(AdvisorDiagnosticLoop::onServerTick);
         NeoForge.EVENT_BUS.addListener((ServerStoppingEvent e) -> LLMClient.shutdown());
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
+        PlannerDependencyRegistry.load();
+
         String apiKey = EnvLoader.get("OPENROUTER_API_KEY");
         if (apiKey == null || apiKey.isBlank() || apiKey.equals("your-api-key-here")) {
             throw new IllegalStateException(
@@ -54,6 +59,9 @@ public class DragonTweaks {
             if (!ModList.get().isLoaded("minecolonies")) return;
 
             IMinecoloniesAPI.getInstance().getEventBus().subscribe(CitizenDiedModEvent.class, e -> {
+                int colonyId = e.getColony().getID();
+                ColonyDiagnosticCache.invalidate(colonyId);
+                AdvisorDiagnosticLoop.markDirty(colonyId);
                 if (!(e.getColony().getWorld() instanceof ServerLevel level)) return;
                 String citizenName = e.getCitizen().getName();
                 String prompt = citizenName + " has died. React with grief or shock in character.";
@@ -61,11 +69,26 @@ public class DragonTweaks {
             });
 
             IMinecoloniesAPI.getInstance().getEventBus().subscribe(BuildingConstructionModEvent.class, e -> {
+                int colonyId = e.getColony().getID();
+                ColonyDiagnosticCache.invalidate(colonyId);
+                AdvisorDiagnosticLoop.markDirty(colonyId);
                 if (!(e.getColony().getWorld() instanceof ServerLevel level)) return;
                 String buildingName = e.getBuilding().getBuildingType().getTranslationKey();
                 Component buildingDisplay = Component.translatable(buildingName);
                 String prompt = "the " + buildingDisplay.getString() + " has just finished construction. React with excitement or pride in character.";
                 ObservationTicker.fireColonyEventObservation(level.getServer(), level, prompt);
+            });
+
+            IMinecoloniesAPI.getInstance().getEventBus().subscribe(CitizenJobChangedModEvent.class, e -> {
+                int colonyId = e.getColony().getID();
+                ColonyDiagnosticCache.invalidate(colonyId);
+                AdvisorDiagnosticLoop.markDirty(colonyId);
+            });
+
+            IMinecoloniesAPI.getInstance().getEventBus().subscribe(CitizenAddedModEvent.class, e -> {
+                int colonyId = e.getColony().getID();
+                ColonyDiagnosticCache.invalidate(colonyId);
+                AdvisorDiagnosticLoop.markDirty(colonyId);
             });
         });
     }
