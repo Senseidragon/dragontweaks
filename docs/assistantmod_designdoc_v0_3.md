@@ -38,7 +38,7 @@ Physical task execution is handled by invisible, intangible proxy entities (shad
 
 ### 2.4 Smart LLM Usage
 
-LLM calls are only made where response latency is acceptable: general chatter, task assignment parsing, colony event commentary, and farewell messages. Time-critical execution paths (pathfinding, entity interaction, threat detection) are entirely deterministic code. The LLM backend is OpenRouter — a valid API key is a hard requirement for the mod to start.
+LLM calls are only made where response latency is acceptable: general chatter, task assignment parsing, colony event commentary, and farewell messages. Time-critical execution paths (pathfinding, entity interaction, threat detection) are entirely deterministic code. The LLM backend is OpenRouter. A valid API key enables Full mode; without it, the mod runs in Lite mode (diagnostic dashboard only, no entities, no LLM features). See Section 8.
 
 ### 2.5 Environmental Presence
 
@@ -318,6 +318,26 @@ b.getCustomName();          // player-set name if any
 6. Path to designated return point; attach leads to nearest fence post
 7. Report completion to player in character
 
+**Sighting Memory:**
+
+The Ranch Hand passively accumulates animal sighting data as it wanders. Each entry contains animal type, approximate XZ coordinates, and a game-tick timestamp (`level.getGameTime()`).
+
+Dual eviction keeps the list bounded under any server configuration:
+- **TTL eviction:** entries older than TTL_TICKS are stale and dropped on next list access. Default ~12,000 ticks (~10 real minutes). Config value.
+- **Cap eviction:** if entry count exceeds the cap after adding a new sighting, the oldest entry is dropped (FIFO). Suggested cap: 8–10 entries. Config value.
+
+Cleanup is lazy — runs on write only. One pass per write: sweep stale entries → append new entry → apply cap eviction.
+
+**Fetch decision logic:** Fresh sighting exists for requested animal type → Ranch Hand expresses confidence and goes. No fresh sighting → expresses uncertainty but goes anyway. No relevant colony facility for that animal type (no cowherder hut for cows, no swineherd hut for pigs) → Ranch Hand will not attempt to catch it, but still records sightings.
+
+**Passive collection:** When Ranch Hand spots a stray animal for which a colony facility exists, it leashes it and delivers it to the nearest appropriate facility. Multiple facilities of the same type split the load naturally.
+
+**Multi-animal handling:** One animal at a time. Ignore additional strays spotted mid-transit; complete current delivery first. If the destination facility is destroyed while en route, release the lead and resume wandering.
+
+**Wandering:** Biases toward areas with previous sightings and known facility locations. If no sightings occur within a configurable period, selects a new destination weighted toward productive areas. Does not repeatedly wander the same empty areas.
+
+**Operational boundary:** Operates beyond colony bounds at a configurable buffer distance. Sky visibility constraint still applies — no underground movement.
+
 **Deflection:** *"Wouldn't a Planner be better suited to that? I'm good with critters but terrible at math."*
 
 **Environmental flavor examples:**
@@ -365,6 +385,58 @@ b.getCustomName();          // player-set name if any
 **Example output:** *"Tom and Alice score 0.72 on slepttonight. Their home building is 87 blocks from their work site. Moving them to Residence 4 would reduce that to 31 blocks and bring them within range of Guard Tower 2. Shall I formalize that recommendation?"*
 
 **Deflection:** *"Rounding up livestock? That's rather beneath my analytical capabilities. A Ranch Hand would serve you better there."*
+
+**State Machine:**
+
+The Advisor exists in one of four named states. State is persisted in player-attached `SavedData` — not entity NBT alone, which does not survive despawn. One Advisor entity per player maximum. Per-player state — multiple players on the same server have fully independent Advisor state.
+
+| State | Entity | Entry Trigger |
+|---|---|---|
+| `DORMANT` | None | Initial — no build tool has ever entered this player's hotbar |
+| `PRE_COLONY` | Floating book, player-attached | Build tool enters hotbar for the first time (one-time per-player trigger) |
+| `COLONY_NO_CITIZEN` | Floating book, colony-attached | `ColonyCreatedModEvent` fires for this player's colony |
+| `COLONY_WITH_CITIZEN` | Floating book-and-quill, colony-attached | Player assigns unemployed citizen to Advisor role via assignment UI |
+
+**DORMANT:** Zero background activity. No ticks. Only one listener: passive inventory change waiting for build tool hotbar event.
+
+**PRE_COLONY:** Floating book follows player at all times at a configurable positional offset (~1.5–2 blocks to one side and slightly behind — never at player coordinates). Entity has native glow effect (verify against NeoForge 1.21.1 before implementing — do not assume 1.20.x method carries over). Hotbar visibility toggle: book despawns if build tool leaves hotbar slots 1–9; check runs every 40 ticks (config value; ONLY active in PRE_COLONY). Responds to any nearby player chat — no keyword required. Colony knowledge: empty.
+
+**COLONY_NO_CITIZEN:** Book is now colony-attached. Follows player while within colony bounds. If player exits colony bounds: holds last valid in-bounds position while player remains within detection range (separate config value from `COMMAND_PROXIMITY`, suggested 32–48 blocks); snaps instantly to Town Hall if player goes beyond detection range. Hotbar toggle fully inactive. Keyword "Advisor" (case-insensitive) required at start of chat message. Colony knowledge: full structural data — all buildings, positions, levels, assigned workers.
+
+**COLONY_WITH_CITIZEN:** Simple book despawns; book-and-quill spawns in its place — the visual change is the passive signal that full capability is unlocked. Same movement rules as `COLONY_NO_CITIZEN`. The shadow entity follows the player, not the citizen — the citizen is the name and personality anchor only; the citizen's MineColonies work continues completely unmodified. Primary trigger: citizen's name (case-insensitive). Fallback trigger: "Advisor" keyword — Advisor reminds player of citizen name in character. Full `Observe → Diagnose → Recommend` loop active. Colony knowledge: full structural + per-citizen data.
+
+**Degraded transitions:**
+- `COLONY_WITH_CITIZEN` → `COLONY_NO_CITIZEN`: triggered by `CitizenJobChangedModEvent` (citizen received a real job) or `CitizenDiedModEvent`. Book-and-quill despawns; simple book respawns at Town Hall. Advisor delivers one unprompted notification that the role is vacant. Citizen name no longer a valid trigger.
+- Any colony state → `PRE_COLONY`: triggered by `ColonyDeletedModEvent`. All Advisor entities despawn; simple book respawns at player's current position. Hotbar toggle reactivates. Build tool trigger flag preserved — Advisor does not re-fire from scratch.
+
+**SavedData fields (per player):**
+
+| Field | Type | Notes |
+|---|---|---|
+| `advisorState` | `AdvisorState` enum | `DORMANT` / `PRE_COLONY` / `COLONY_NO_CITIZEN` / `COLONY_WITH_CITIZEN` |
+| `buildToolTriggerFired` | boolean | True once build tool has ever entered hotbar. Never resets. |
+| `assignedCitizenId` | Integer (nullable) | Null unless `COLONY_WITH_CITIZEN` |
+| `advisorEntityUUID` | UUID (nullable) | Null when entity is despawned |
+
+**Config values:**
+
+| Config Key | Type | Default | Notes |
+|---|---|---|---|
+| `ADVISOR_ENTITY_OFFSET` | double | 1.8 | Blocks offset from player. Not hardcoded. |
+| `ADVISOR_HOTBAR_CHECK_TICKS` | int | 40 | Hotbar poll interval. PRE_COLONY only. |
+| `ADVISOR_BOUNDARY_DETECTION_RANGE` | int | 40 | Blocks — range before snap to Town Hall. |
+| `ADVISOR_WHISPER_THRESHOLD` | int | 120 | Characters — above this triggers whisper pattern. |
+| `ADVISOR_FORCE_PRIVATE` | boolean | false | Server operator override — forces all responses private. |
+
+**Implementation verification required before coding:**
+
+| Item | Verification Target |
+|---|---|
+| Build tool item ID | MineColonies item registry — do not assume or hardcode |
+| Glow effect application | NeoForge 1.21.1 entity rendering — do not assume 1.20.x method |
+| `colony.isCoordInColony()` signature | MineColonies API stubs |
+| `ColonyCreatedModEvent` | Already confirmed in API reference — use it |
+| `ColonyDeletedModEvent` | Already confirmed in API reference — use it |
 
 ---
 
@@ -453,7 +525,7 @@ When MineColonies assigns a real job to a citizen with an active role:
 | Request format | OpenAI messages array: `[{"role":"system","content":"..."},{"role":"user","content":"..."}]` |
 | `max_tokens` | 100 — always, never omit |
 | `stream` | `false` — always |
-| API key | Hard requirement — mod fails to start without a valid key |
+| API key | Mode flag — absent/blank/placeholder key → Lite mode (no crash, no fail-to-start). See Section 8. |
 
 ### 7.2 LLM vs. Template Routing
 
@@ -495,6 +567,23 @@ Because LLM response latency creates dead silence, every interaction triggers an
 
 > **Note:** *"Hmm..."* has been removed from the standard acknowledgment path. It is retained only as a timeout fallback — if the actual timeout threshold is exceeded, the NPC fires a brief in-character response. Otherwise silence until the LLM responds.
 
+**Response Delivery — Short vs Long:**
+
+Short and long responses are routed differently based on a configurable character threshold. This applies to the Advisor at all states.
+
+- **Short** (below threshold): delivered to public chat as `[CitizenName]: [response text]`. In `PRE_COLONY` and `COLONY_NO_CITIZEN` states: `Advisor: [response text]`.
+- **Long** (at or above threshold): public whisper template fires instantly (never LLM-generated); full response text delivered privately to the triggering player only.
+
+| State | Public Whisper Template Pool |
+|---|---|
+| `COLONY_WITH_CITIZEN` | "[CitizenName] whispers something to [PlayerName]." / "[CitizenName] leans over and murmurs to [PlayerName]." / "[CitizenName] speaks quietly with [PlayerName]." |
+| `COLONY_NO_CITIZEN` | "The advisor whispers something to [PlayerName]." / "The advisor murmurs quietly to [PlayerName]." |
+| `PRE_COLONY` | "Your advisor murmurs something to you." / "The book rustles quietly near [PlayerName]." |
+
+**Threshold:** `ADVISOR_WHISPER_THRESHOLD` config value. Default: 120 characters.
+
+**Server operator override:** `ADVISOR_FORCE_PRIVATE` forces all responses to private delivery regardless of length. Public whisper still fires so nearby players have a visual cue — only the full response text is suppressed from public chat.
+
 ### 7.5 Fallback Behavior
 
 - If OpenRouter is unreachable or times out: fall back to template pool responses silently
@@ -503,9 +592,107 @@ Because LLM response latency creates dead silence, every interaction triggers an
 
 ---
 
-## 8. Interaction Model
+## 8. Operating Modes, Diagnostic Data & Dashboard
 
-### 8.1 Command Detection
+### 8.1 Lite Mode vs Full Mode
+
+The mod detects its operating mode at startup based on API key validity. Mode is set once and does not change during a session.
+
+**Mode detection:**
+- API key present, non-blank, non-placeholder → Full mode
+- API key absent, blank, or placeholder value → Lite mode
+- No crash. No fail-to-start. Mode flag is set and respected throughout.
+- The `IllegalStateException` in `DragonTweaks.java` `commonSetup()` must be replaced with a mode flag assignment. Do not throw on missing key.
+
+**One-time lite mode notification:** On first world load in lite mode, deliver a single chat message to the player: *"Assistant Mod is running in Lite mode. Add an OpenRouter API key in config to unlock full AI companion features."* Fires once per player. Does not repeat on subsequent loads.
+
+**Full mode:** All features described in this document apply without restriction.
+
+**Lite mode — what exists:**
+- Colony diagnostic data layer (`ColonyDiagnosticReport` — see Section 8.2)
+- `/assistant advisor` command — opens Advisor diagnostic panel
+- `/assistant planner` command — opens Planner dependency chain panel
+- Both panels read from cached `ColonyDiagnosticReport`
+
+**Lite mode — what does not exist:**
+- No entities of any kind. No floating books, no book-and-quill, no flavor NPCs, no shadow entities. Entity presence without LLM response capability is visual noise with no gameplay value.
+- No citizen role assignment. The role assignment UI does not open in lite mode. `CitizenInteractDetector` must check mode flag and return early if lite mode is active.
+- No Ranch Hand or Scout roles. Physical world interaction without personality is meaningless.
+- No Advisor or Planner shadow entities following the player. Panel access is command-driven only.
+- No pre-colony floating book. No build tool hotbar trigger.
+- No whisper pattern. No LLM acknowledgment messages. No template responses.
+
+**Lite mode commands:**
+- `/assistant advisor` — opens Advisor diagnostic panel
+- `/assistant planner` — opens Planner dependency chain panel
+- `/assistant` with no subcommand — prints available commands to player
+
+Both panel commands are also available in full mode as supplementary views. They are not lite-mode exclusive, but they are lite mode's primary interface.
+
+---
+
+### 8.2 Colony Diagnostic Report (`ColonyDiagnosticReport`)
+
+The central diagnostic data object. Generated by the same code regardless of mode. Both the LLM context injection (full mode) and the dashboard panels (both modes) read from this object.
+
+**Generation:**
+- Async. Never on the main game thread.
+- Cached with a short TTL. Suggested default: 30 seconds. Config value.
+- Cache invalidated early on relevant colony events: `BuildingConstructionModEvent`, `CitizenJobChangedModEvent`, `CitizenAddedModEvent`, `CitizenDiedModEvent`
+- Both panels and LLM context always read from cache. Never re-poll on demand.
+
+**Contents:**
+- Colony metadata: name, citizen count, housing cap, Town Hall level, overall happiness score
+- Per-citizen records: name, job, work building position, home building position, commute distance (derived), full happiness factor breakdown (all ten canonical factor IDs with factor value and weight), red/yellow flag per factor
+- Flagged issues list: ranked by severity, each issue citing the specific API value that triggered it
+- Actionable recommendations list: each includes full dependency chain; blocking dependencies surfaced first
+- Research snapshot: completed list, in-progress list with progress in ticks, not-started status for known prerequisite researches
+- Building inventory: all buildings with level, built status, pending construction status, assigned worker
+- Environmental context: `doDaylightCycle` state, time of day, weather, `ThreatLevel`
+
+**Full mode use:** Serialized into structured context block injected into LLM system prompt. LLM expresses findings conversationally in character.
+
+**Lite mode use:** Rendered directly as dashboard panel UI. No language generation.
+
+---
+
+### 8.3 Dashboard Panels
+
+Two panels. Both read from `ColonyDiagnosticReport`. Opened via command in lite mode; also accessible via command in full mode as a supplementary view.
+
+#### Advisor Panel
+Displays citizen-level happiness diagnostics and colony health overview.
+
+Content (detail design session required before implementation):
+- Colony health summary header
+- Per-citizen happiness breakdown — all ten factors, red/yellow flagged
+- Commute distance per citizen, flagged if over threshold
+- Prioritized issue list with severity indicators
+- Environmental warnings (`doDaylightCycle` false, active raid, etc.)
+
+#### Planner Panel
+Displays dependency chain analysis and build recommendations.
+
+> **NOTE:** Planner panel content requires a dedicated design session before implementation. Do not implement panel content until that session has occurred and this section is updated with locked decisions.
+
+Content (pending design session):
+- Build recommendations with full dependency chains
+- Research prerequisite status
+- Worker and bed availability
+- Current work order queue
+- Blocking dependency surfaced first for each recommendation chain
+
+---
+
+### 8.4 Development Workflow Note
+
+In lite mode during development, the dashboard panels serve as the primary integration test harness for the diagnostic data layer. Verify panel data is correct before wiring LLM responses to `ColonyDiagnosticReport` output. A correct panel in lite mode means the data layer is trustworthy. LLM integration then becomes a presentation concern only, not a data concern.
+
+---
+
+## 9. Interaction Model
+
+### 9.1 Command Detection
 
 - Proximity threshold: 10 blocks XZ radius, ±5 blocks Y tolerance (cylindrical, not spherical)
 - Detection radius and command radius are the same value — one config entry, not two
@@ -514,7 +701,7 @@ Because LLM response latency creates dead silence, every interaction triggers an
 - Commands parsed for intent before execution or deflection
 - Unrecognized commands fall through to general chatter / LLM
 
-### 8.2 Response Pipeline
+### 9.2 Response Pipeline
 
 1. Player chat message detected within proximity
 2. Build `EnvironmentalContext` payload (including `doDaylightCycle` state)
@@ -524,7 +711,7 @@ Because LLM response latency creates dead silence, every interaction triggers an
 6. General chatter → send immediate acknowledgment, fire async LLM call
 7. LLM response queued back to main thread via server tick queue, delivered via in-world chat
 
-### 8.3 Greeting System (Template-Based, No LLM)
+### 9.3 Greeting System (Template-Based, No LLM)
 
 | Time | Ranch Hand | Scout | Advisor | Planner |
 |---|---|---|---|---|
@@ -533,7 +720,7 @@ Because LLM response latency creates dead silence, every interaction triggers an
 | Evening | *"Sun's going down. Heading in soon."* | *"Getting dark. I'll stay out a bit longer."* | *"The colony's numbers look better today."* | *"Tomorrow's schedule is prepared."* |
 | Night | *"Shouldn't you be sleeping, boss?"* | *"You're up late. Something wrong?"* | *"Burning the midnight oil? So am I."* | *"Night work is inefficient. But here we are."* |
 
-### 8.4 Locale System
+### 9.4 Locale System
 
 - NPC response language is driven by the Minecraft client locale setting (`en_us`, `ja_jp`, `ru_ru`, `zh_cn`, etc.)
 - NPC understands any language; always responds in the configured locale
@@ -542,7 +729,7 @@ Because LLM response latency creates dead silence, every interaction triggers an
 
 ---
 
-## 9. Development Phases
+## 10. Development Phases
 
 The PoC is complete. The mod has a working LLM backend (OpenRouter), flavor NPC entity with follow/stop behavior, conversation memory with NBT persistence, proactive environmental observations, role-differentiated personas, and `SavedData` role assignment storage wired and confirmed on world load.
 
@@ -626,7 +813,7 @@ Current work is Phase 1 — building the citizen interaction and role assignment
 
 ---
 
-## 10. Open Questions & Decisions Pending
+## 11. Open Questions & Decisions Pending
 
 | Question | Status | Notes |
 |---|---|---|
@@ -648,9 +835,9 @@ Current work is Phase 1 — building the citizen interaction and role assignment
 
 ---
 
-## 11. Technical Notes
+## 12. Technical Notes
 
-### 11.1 Target Environment
+### 12.1 Target Environment
 
 | Parameter | Value |
 |---|---|
@@ -660,7 +847,7 @@ Current work is Phase 1 — building the citizen interaction and role assignment
 | Java | 21+ |
 | LLM Backend | OpenRouter — `google/gemma-4-26b-a4b-it` |
 
-### 11.2 Key Risks
+### 12.2 Key Risks
 
 | Risk | Severity | Mitigation |
 |---|---|---|
@@ -672,7 +859,7 @@ Current work is Phase 1 — building the citizen interaction and role assignment
 | `greatfood` modifier ID unconfirmed | Low | Omit until ID confirmed; does not block any critical path |
 | NeoForge 1.21.1 class regressions from 1.20.x | High | Verify all vanilla/NeoForge class names against 1.21.1 sources before use — `HumanoidMob` does not exist in 1.21.1; `PathfinderMob` is correct |
 
-### 11.3 Advisor State Contract
+### 12.3 Advisor State Contract
 
 The following are implementation requirements, not guidelines. An Advisor that violates them will lose player trust and become unused.
 
@@ -694,7 +881,7 @@ The following are implementation requirements, not guidelines. An Advisor that v
 | Surface longest blocking dependency first in build path recommendations | High |
 | Log colony state at time of each recommendation | Medium |
 
-### 11.4 Session Continuity
+### 12.4 Session Continuity
 
 Cognitive entropy is real in extended AI-assisted development sessions. Recommended practices:
 
@@ -706,4 +893,4 @@ Cognitive entropy is real in extended AI-assisted development sessions. Recommen
 
 ---
 
-*End of Design Document v0.3 · Converted from v0.2 docx · Updated for OpenRouter backend, two-tier NPC architecture, Town Hall slot system, and actual build state as of 2026-05-01*
+*End of Design Document v0.3 · Converted from v0.2 docx · Updated for OpenRouter backend, two-tier NPC architecture, Town Hall slot system, and actual build state as of 2026-05-01 · v0.3.1 additions: Advisor state machine, Lite/Full mode, ColonyDiagnosticReport, Dashboard Panels, Ranch Hand sighting memory — 2026-05-07*

@@ -1,5 +1,5 @@
 # DragonTweaks — In-Game Verification Checklist & Decision Log
-*Last updated: 2026-05-02*
+*Last updated: 2026-05-07*
 
 Legend: ✅ Verified | ❌ Failed/Bug | ⚠️ Flagged | 🔲 Untested/Assumed | 🚫 Not built yet | 🔁 Deferred
 
@@ -45,7 +45,7 @@ Hardcoding keyword expansion is **explicitly rejected** due to i18n — Japanese
 | 🔲 | Fallback fires on LLM timeout | Requires deliberate network disruption test |
 | 🔲 | OpenRouter API key never appears in logs | Code review only — not in-game confirmed |
 | ✅ | Conversation memory persists across sessions | Session 2 — "Bubba" remembered after full JVM exit and relog |
-| ⚠️ | "Hmm..." acknowledgment — see architectural note below | Decision made — see LLM Hard Requirement note. Refactor is a near-term build target. |
+| ✅ | "Hmm..." acknowledgment — see architectural note below | Refactor complete — confirmed absent from all source files 2026-05-05. Fallback path wired via `sendFallback()` in `LLMClient.java`. |
 | 🔁 | NPC uses correct player name consistently | Deferred — see Player Nickname note |
 | ✅ | NPC handles unknown/nonsense words gracefully | Session 1 — "fraggle" deflected in character |
 | ✅ | NPC generates contextually aware environmental commentary | Session 2 — squid/salmon observations fit surroundings |
@@ -55,7 +55,7 @@ The LLM key is a **hard requirement** for the mod. No key = mod does not run. Th
 
 "Hmm..." is retained **only** as a timeout fallback — if the actual timeout threshold is exceeded, Joe fires a brief in-character response. Otherwise silence until the LLM responds.
 
-**Near-term build target:** enforce hard failure on missing API key, and refactor "Hmm..." out of standard acknowledgment path.
+~~**Near-term build target:** enforce hard failure on missing API key, and refactor "Hmm..." out of standard acknowledgment path.~~ ✅ Done — startup check in `DragonTweaks.java` `commonSetup()`. Throws `IllegalStateException` on null, blank, or placeholder key.
 
 ### Player Nickname / Name Drift
 Current behavior: Joe remembers a nickname for as long as it stays in context, then drifts back to the Minecraft username. Honest to how conversational memory works.
@@ -111,7 +111,7 @@ Two tiers share the LLM backend but are otherwise entirely separate systems.
 |--------|------|-------|
 | ✅ | RoleAssignmentData initializes from SavedData on world open | LevelEvent.Load handler confirmed in-game 2026-05-01 — no exceptions on world load |
 | 🔲 | RoleAssignmentData record survives full JVM restart (write + reload test) | Not yet done — required before proceeding to Step 4 |
-| 🚫 | Role record written on assignment | Requires CitizenInteractDetector (not yet built) |
+| 🚫 | Role record written on assignment | CitizenInteractDetector built 2026-05-06 — detects interaction and guards correctly. Write path still absent; requires RoleAssignmentScreen (Step 6) to complete. |
 | 🚫 | Slot count enforced per TH level | Requires role assignment GUI |
 | 🔲 | Role revoked on CitizenJobChangedModEvent | Not yet tested |
 | 🔲 | Role slot released on CitizenDiedModEvent | Not yet tested |
@@ -125,7 +125,7 @@ Two tiers share the LLM backend but are otherwise entirely separate systems.
 | ✅ | `/assistant spawn [persona]` creates flavor NPC with correct persona | Session 1 |
 | ✅ | `/assistant delete` removes NPC | Works — confirmed in testing |
 | 🚫 | `/assistant revoke <name>` releases citizen role slot | Not yet built — tied to role assignment system, deferred |
-| 🚫 | `/assistant locale [code]` manual locale override | **Near-term build target** — see Locale note |
+| ✅ | `/assistant locale [code]` manual locale override | Confirmed working in-game 2026-05-05. Locale override fires correctly; `/assistant locale reset` clears override correctly. |
 
 ---
 
@@ -134,11 +134,11 @@ Two tiers share the LLM backend but are otherwise entirely separate systems.
 ### Architectural Decision
 Joe's response language is driven by the **Minecraft client locale setting** (`en_us`, `ja_jp`, `ru_ru`, `zh_cn` etc.), not by what language the player types in. Joe understands any language; he always responds in the configured locale.
 
-**Immediate build target:** `/assistant locale [code]`
+~~**Immediate build target:** `/assistant locale [code]`
 - Manually injects locale string into session context for testing
 - Unrecognized codes fall back to `en_us` with a logged warning
 - `/assistant locale reset` clears the override
-- Examples: `/assistant locale ru_ru`, `/assistant locale ja_jp`
+- Examples: `/assistant locale ru_ru`, `/assistant locale ja_jp`~~ ✅ Done — confirmed in-game 2026-05-05.
 
 **Deferred:** Auto-detect via `Minecraft.getInstance().getLanguageManager().getSelected()`, transmitted server-side via packet on session init. Needs NeoForge 1.21.1 API path verification first.
 
@@ -150,14 +150,22 @@ Joe's response language is driven by the **Minecraft client locale setting** (`e
 
 These are to be completed before the citizen interaction work (Steps 4–7 in devchat.md).
 
-1. **`/assistant locale [code]`** — debug command, locale injection, fallback to en_us
-2. **Observation ticker idle cooldown tuning** — increase passive comment interval; config value change only
-3. **"Hmm..." refactor** — remove as standard acknowledgment, retain as timeout fallback only
-4. **LLM hard requirement enforcement** — mod fails to start without valid API key
-5. **SavedData persistence smoke test** — write a role assignment, do a full JVM restart, confirm record survives. Must pass before proceeding to Step 4.
+1. ~~**`/assistant locale [code]`** — debug command, locale injection, fallback to en_us~~ ✅ Done
+2. **Observation ticker idle cooldown tuning** — increase passive comment interval; config value change only — code change done, needs in-game feel test
+3. ~~**"Hmm..." refactor** — remove as standard acknowledgment, retain as timeout fallback only~~ ✅ Done
+4. ~~**LLM hard requirement enforcement** — mod fails to start without valid API key~~ ✅ Done
+5. ~~**SavedData persistence smoke test** — write a role assignment, do a full JVM restart, confirm record survives. Must pass before proceeding to Step 4.~~ ~~Moot — no write path exists until Steps 5–6 complete.~~
 6. **Flavor NPC behavior space design** — patrol, idle routines, event reactions (design session needed before implementation)
 
 > **Note:** Items involving MineColonies citizens (`CitizenJobChangedModEvent`, `CitizenDiedModEvent`, role revocation, slot enforcement) cannot be meaningfully tested until MineColonies integration work begins. These are tracked above for completeness but are not actionable until then.
+
+---
+
+---
+
+## Design Decisions Locked — 2026-05-07
+
+- **Advisor state machine** — Four states: DORMANT, PRE_COLONY, COLONY_NO_CITIZEN, COLONY_WITH_CITIZEN. Full spec in `docs/devchat.md` under Design Decisions — Locked. Covers entity behavior, visibility toggle, communication triggers, capability tiers, degraded state transitions, response delivery (short/long/whisper), SavedData fields, and required config values. Not yet implemented — design only.
 
 ---
 
