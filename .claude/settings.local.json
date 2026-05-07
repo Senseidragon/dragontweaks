@@ -58,7 +58,9 @@
       "Bash(grep -o '\"name\":\"Bash\",\"input\":{\"command\":\"[^\"]*\"' /c/Users/sense/.claude/projects/C--Users-sense-Desktop-DragonTweaks/235ad43b-3f6e-4dd2-9e24-a30c1b6ebbcd.jsonl)",
       "Bash(grep -o '\"command\":\"[^\"\\\\\\\\]*')",
       "Bash(grep -v '^$')",
-      "Bash(javap -p \"net/neoforged/neoforge/event/tick/ServerTickEvent.class\")"
+      "Bash(javap -p \"net/neoforged/neoforge/event/tick/ServerTickEvent.class\")",
+      "Bash(unzip *)",
+      "Bash(xargs cat *)"
     ]
   }
 }

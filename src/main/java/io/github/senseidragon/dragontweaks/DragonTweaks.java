@@ -36,6 +36,7 @@ public class DragonTweaks {
                 RoleAssignmentData.get(serverLevel);
             }
         });
+        NeoForge.EVENT_BUS.addListener(CitizenInteractDetector::onEntityInteract);
         NeoForge.EVENT_BUS.addListener(ChatInterceptor::onServerChat);
         NeoForge.EVENT_BUS.addListener(ObservationTicker::onServerTick);
         NeoForge.EVENT_BUS.addListener((ServerStoppingEvent e) -> LLMClient.shutdown());

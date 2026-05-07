@@ -1,7 +1,7 @@
 # DragonTweaks — Current State Document
 *Replaces the original devchat.md as the active reference for Claude Code.*
 *Full session history archived in devchat_archive.md — do not delete.*
-*Last updated: 2026-05-02*
+*Last updated: 2026-05-06*
 
 ---
 
@@ -67,7 +67,7 @@ All source files are in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `ChatInterceptor.java` | ✅ Complete | Intercepts player chat, routes to LLM, multi-NPC addressing |
 | `Config.java` | ✅ Complete | NeoForge ModConfigSpec. See Config section below. |
 | `ConversationMemory.java` | ✅ Complete | Per-NPC conversation history |
-| `DragonTweaks.java` | ✅ Complete | Main mod class, event bus registration — LevelEvent.Load handler added 2026-05-01; MineColonies CitizenDiedModEvent and BuildingConstructionModEvent handlers added 2026-05-05, guarded by ModList.isLoaded check |
+| `DragonTweaks.java` | ✅ Complete | Main mod class, event bus registration — LevelEvent.Load handler added 2026-05-01; MineColonies CitizenDiedModEvent and BuildingConstructionModEvent handlers added 2026-05-05, guarded by ModList.isLoaded check; CitizenInteractDetector registered 2026-05-06 |
 | `DragonTweaksClient.java` | ✅ Complete | Client-only setup |
 | `DragonTweaksClientEvents.java` | ✅ Complete | Client event bus subscriber |
 | `EnvLoader.java` | ✅ Complete | Reads `.env` file for API key |
@@ -78,7 +78,7 @@ All source files are in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `RolePersona.java` | ✅ Complete | Role keyword → persona block mapping |
 | `RoleAssignmentData.java` | ✅ Complete | SavedData for role assignments — file exists and is correct; updated 2026-04-30 to match AssistantRoleRecord signature |
 | `RoleAssignmentScreen.java` | ❌ Does not exist | Client-side role assignment UI |
-| `CitizenInteractDetector.java` | ❌ Does not exist | Right-click citizen detection |
+| `CitizenInteractDetector.java` | ✅ Complete | PlayerInteractEvent.EntityInteract handler — citizen check, null-safe ICitizenData retrieval, isAssigned guard, dynamic TH-level slot cap, event cancel + debug log; RoleAssignmentScreen stub only (TODO comment); added 2026-05-06 |
 
 ---
 
@@ -123,6 +123,262 @@ Verify exact field names against source before referencing.
 - Periodic AABB detection sweep on a timer. No pathfinding. No waypoints. No navigation goal stack.
 - Applies to Phase 3 — not current work. Do not implement anything for this now.
 
+### Pre-Colony Advisor — State Machine
+
+The Advisor exists in one of four named states. State must be persisted in
+SavedData attached to the player, not in entity NBT alone. Entity NBT does not
+survive despawn. SavedData survives server restarts.
+
+State enum: DORMANT, PRE_COLONY, COLONY_NO_CITIZEN, COLONY_WITH_CITIZEN.
+Degraded states are re-entries into existing enum values, not separate values.
+One Advisor entity per player maximum — enforce on spawn.
+Per-player state — multiple players on the same server have fully independent
+Advisor state.
+
+---
+
+#### State 0 — DORMANT
+- No build tool has ever entered this player's hotbar.
+- Zero background activity. No ticks. No listeners of any kind except the one
+  passive inventory change listener waiting for a build tool hotbar event.
+- No entity exists. Nothing is allocated. Completely silent.
+
+---
+
+#### State 1 — PRE_COLONY (Simple Book, Player-Attached)
+**Entry trigger:** Build tool enters the player's hotbar for the first time
+ever. One-time per-player trigger. Does not re-fire on subsequent hotbar
+additions. Player record is created in SavedData at this moment.
+
+**Entity:** Simple floating book. Follows the player at all times.
+- Maintains a positional offset from the player: approximately 1.5–2 blocks
+  to one side and slightly behind. Never at player coordinates. Offset value
+  must be a config entry. Not hardcoded.
+- Offset repositions gracefully when the player turns — not a rigid fixed
+  vector, not a snap.
+- Entity has a visual glow effect (Minecraft native glowing effect, equivalent
+  to spectral arrow rendering). Visible in the dark. Not a world light source.
+  No dependency on dynamic lighting mods. Verify glow application against
+  NeoForge 1.21.1 before implementing — do not assume 1.20.x method carries
+  over.
+- Visible to all nearby players at all times.
+
+**Visibility toggle (hotbar check):**
+- Book is visible only while a build tool is present anywhere in hotbar slots
+  1–9. If build tool leaves the hotbar entirely (main inventory, chest,
+  container, backpack), book despawns silently. Respawns when build tool
+  returns to hotbar.
+- Hotbar check runs every 40 ticks (2 seconds). Config value. Not hardcoded.
+- This check is ONLY active in PRE_COLONY state and in the degraded PRE_COLONY
+  re-entry after colony destruction. Completely inactive in COLONY_NO_CITIZEN
+  and COLONY_WITH_CITIZEN. Do not run it during colony states.
+
+**Communication:** Responds to any nearby player chat within proximity
+threshold. No keyword required in this state.
+- No follow or stop commands. These do not apply to the Advisor at any state.
+
+**Capability — two awareness tiers:**
+- Tier 1 (Sensory): Immediate surroundings at player position. Nearby terrain,
+  water, forest coverage, elevation, hostile mobs within detection radius.
+  Position-dependent — updates as player moves.
+- Tier 2 (Colony knowledge): Empty in PRE_COLONY — no colony exists.
+- Biome-aware: Advisor adjusts advice tone and content to current biome.
+  Queried from World.getBiome() at player position. A Jagged Peaks biome
+  warrants materially different site advice than a Plains or River biome.
+- May comment on terrain, water proximity, forest coverage, defensibility,
+  elevation, and biome suitability for a colony. Must not reference colony
+  data, citizens, buildings, or happiness — none of these exist yet.
+- LLM system prompt must explicitly scope responses to pre-colony context only.
+
+**Build tool item ID** must be verified against the MineColonies item registry
+before implementation. Do not assume or hardcode an item name or ID.
+
+---
+
+#### State 2 — COLONY_NO_CITIZEN (Simple Book, Colony-Attached)
+**Entry trigger:** ColonyCreatedModEvent fires for this player's colony.
+
+**On transition:** Advisor delivers one unprompted message (LLM or template):
+"A colony has been established. I'll be staying close from now on. If you need
+me, say 'Advisor' followed by your question — but only while you're within the
+colony bounds."
+This message fires once and is not repeated.
+
+**Entity:** Simple floating book. Now colony-attached.
+- Always follows the player while the player is within colony bounds.
+  No follow or stop commands.
+- If player exits colony bounds: Advisor holds its last valid in-bounds
+  position as long as the player remains within detection range of that
+  position. Detection range for this check is a separate config value from
+  COMMAND_PROXIMITY — suggested default 32–48 blocks.
+- If player moves beyond that detection range: entity snaps instantly to Town
+  Hall block and waits. Snap is immediate, not a pathfind.
+- When player returns within colony bounds and within detection range, entity
+  resumes following.
+- Hotbar visibility toggle is fully inactive in this state. Book is always
+  visible within colony bounds regardless of hotbar contents.
+- Visible to all nearby players at all times.
+
+**Communication:** Responds only within colony bounds. Keyword "Advisor"
+(case-insensitive) required at the start of a chat message.
+
+**Capability:**
+- Tier 1 (Sensory): Immediate surroundings at player's current position.
+  Same as PRE_COLONY sensory tier.
+- Tier 2 (Colony knowledge): Full colony structural data — all buildings,
+  positions relative to Town Hall, levels, assigned workers — queried from
+  MineColonies API. Available regardless of where within the colony the player
+  is standing. Advisor may reference buildings not immediately visible:
+  "The Forester's Hut is about 80 blocks northeast of the Town Hall."
+  This is colony knowledge, not sensory. LLM prompt must label these
+  distinctly so the model does not conflate them.
+- Cannot run full Observe → Diagnose → Recommend loop. No citizen anchor.
+- Proactively announces when first colonists arrive and prompts player to
+  assign one of the arriving citizens to the Advisor role.
+
+---
+
+#### State 3 — COLONY_WITH_CITIZEN (Book and Quill, Full Capability)
+**Entry trigger:** Player assigns an unemployed citizen to the Advisor role
+via the role assignment UI.
+
+**On transition:** Simple book despawns. Book-and-quill spawns in its place.
+The visual change is the passive signal that full capability is unlocked.
+No popup or notification beyond the entity change itself.
+
+**Entity:** Floating book-and-quill. Colony-attached. Same movement rules as
+COLONY_NO_CITIZEN — follows player within colony bounds, holds position at
+boundary while player is within detection range, snaps instantly to Town Hall
+if player goes beyond detection range. Visible to all nearby players.
+
+**The shadow entity follows the player, not the citizen.** The citizen is the
+name and personality anchor only. No part of the entity movement or
+pathfinding system tracks the citizen's position. The citizen continues their
+MineColonies work completely unmodified and untracked.
+
+**Communication:**
+- Primary trigger: citizen's name (case-insensitive). Example: "Joe, what
+  should I prioritize?"
+- Fallback trigger: keyword "Advisor". When used, Advisor responds and reminds
+  player of citizen name in character: "You know, you can just call me Joe."
+- Colony bounds restriction applies. No response outside colony bounds.
+
+**Capability:**
+- Tier 1 (Sensory): Immediate surroundings at player position.
+- Tier 2 (Colony knowledge): Full colony structural data plus full per-citizen
+  data. Available anywhere within colony bounds.
+- Full Observe → Diagnose → Recommend loop active.
+- All ten happiness factors, commute distance calculation, research tree
+  queries, dependency chain analysis — all active.
+- Colony boundary check: colony.isCoordInColony(world, pos). Verify method
+  signature against stubs before implementation.
+
+---
+
+#### Degraded State — COLONY_WITH_CITIZEN → COLONY_NO_CITIZEN
+**Entry trigger:** CitizenJobChangedModEvent (citizen received a real job
+assignment) or CitizenDiedModEvent (citizen died).
+
+- Book-and-quill despawns. Simple book respawns at Town Hall.
+- Capability degrades to COLONY_NO_CITIZEN level.
+- Citizen name no longer a valid trigger. Keyword "Advisor" required again.
+- Advisor delivers one unprompted notification that the role is vacant and
+  prompts player to assign a new citizen.
+- This is a return to State 2, not a new state.
+
+---
+
+#### Degraded State — Any Colony State → PRE_COLONY
+**Entry trigger:** ColonyDeletedModEvent fires for this player's colony.
+
+- All Advisor entities despawn. Simple book respawns at player's current
+  position.
+- PRE_COLONY behavior reinstates fully: follows player freely, hotbar
+  visibility toggle reactivates at 40-tick interval, keyword restriction
+  lifted, responds to any nearby chat.
+- Capability resets to pre-colony sensory and biome awareness only.
+  Tier 2 colony knowledge clears entirely.
+- Player's one-time build tool trigger flag is preserved — Advisor does not
+  re-trigger from scratch. It resumes PRE_COLONY behavior from current
+  player position immediately.
+
+---
+
+### Advisor Response Delivery
+
+Applies at all states. Governs how Advisor responses reach players.
+
+**Short responses** (response length below threshold):
+- Delivered to public chat.
+- Format: "[CitizenName]: [response text]"
+- In PRE_COLONY: "Advisor: [response text]"
+- In COLONY_NO_CITIZEN: "Advisor: [response text]"
+
+**Long responses** (response length at or above threshold):
+- Public message drawn from a small template pool (2–3 variants). Never
+  LLM-generated — must be instant.
+- Private message: full response text delivered only to the triggering player.
+
+Public whisper template pools by state:
+
+COLONY_WITH_CITIZEN (citizen name known):
+  - "[CitizenName] whispers something to [PlayerName]."
+  - "[CitizenName] leans over and murmurs to [PlayerName]."
+  - "[CitizenName] speaks quietly with [PlayerName]."
+
+COLONY_NO_CITIZEN:
+  - "The advisor whispers something to [PlayerName]."
+  - "The advisor murmurs quietly to [PlayerName]."
+
+PRE_COLONY:
+  - "Your advisor murmurs something to you."
+  - "The book rustles quietly near [PlayerName]."
+
+**Threshold:** Config value. Suggested default: 120 characters.
+
+**Server operator override:** Config toggle to force all responses to private
+delivery regardless of length. When active, public whisper message still fires
+so nearby players have a visual cue — only the full response text is suppressed
+from public chat.
+
+---
+
+### Advisor — Implementation Verification Required Before Coding
+
+These items must be verified against sources or stubs before any dependent
+code is written. Do not assume. Do not hardcode.
+
+| Item | Verification Target |
+|---|---|
+| Build tool item ID | MineColonies item registry |
+| Glow effect application | NeoForge 1.21.1 entity rendering |
+| colony.isCoordInColony() signature | MineColonies API stubs |
+| ColonyCreatedModEvent | Already confirmed in API reference — use it |
+| ColonyDeletedModEvent | Already confirmed in API reference — use it |
+
+---
+
+### Advisor — SavedData Fields (Per Player)
+
+| Field | Type | Notes |
+|---|---|---|
+| advisorState | AdvisorState enum | DORMANT / PRE_COLONY / COLONY_NO_CITIZEN / COLONY_WITH_CITIZEN |
+| buildToolTriggerFired | boolean | True once build tool has ever entered hotbar. Never resets. |
+| assignedCitizenId | Integer (nullable) | Null unless COLONY_WITH_CITIZEN |
+| advisorEntityUUID | UUID (nullable) | Null when entity is despawned |
+
+---
+
+### Advisor — Config Values Required
+
+| Config Key | Type | Default | Notes |
+|---|---|---|---|
+| ADVISOR_ENTITY_OFFSET | double | 1.8 | Blocks offset from player. Not hardcoded. |
+| ADVISOR_HOTBAR_CHECK_TICKS | int | 40 | Hotbar poll interval. PRE_COLONY only. |
+| ADVISOR_BOUNDARY_DETECTION_RANGE | int | 40 | Blocks — range before snap to Town Hall. |
+| ADVISOR_WHISPER_THRESHOLD | int | 120 | Characters — above this triggers whisper pattern. |
+| ADVISOR_FORCE_PRIVATE | boolean | false | Server operator override. Forces all responses private. |
+
 ---
 
 ## What To Build Next
@@ -149,12 +405,8 @@ These items are small and targeted. Complete them in order before proceeding to 
 4. ~~**LLM hard requirement enforcement**~~ ✅ Done — startup check exists in `DragonTweaks.java` `commonSetup()` at lines 40–44. Checks null, blank, and placeholder key value. Throws `IllegalStateException` with clear message on failure.
 5. ~~**SavedData persistence smoke test**~~ — Moot. No command currently writes to `RoleAssignmentData`. Write path does not exist until Steps 4–7 are complete. Not a blocker for Step 4.
 
-### Step 4 — Build `CitizenInteractDetector.java`
-- Verify correct NeoForge 1.21.1 event for player→entity right-click before writing.
-- Verify how to identify a MineColonies citizen entity from the interaction event.
-- Verify how to retrieve `ICitizenData` — check null safety.
-- On right-click of unemployed citizen with available slot: open `RoleAssignmentScreen`.
-- On right-click of already-assigned citizen: pass through to MineColonies normally.
+### ~~Step 4~~ ✅ Done — `CitizenInteractDetector.java` built and registered 2026-05-06
+Subscribes to `PlayerInteractEvent.EntityInteract`. Guards client-side and MineColonies not loaded. Casts entity to `AbstractEntityCitizen`, retrieves `ICitizenData` with null check, reads name/id/job. Checks `isAssigned()` to pass through already-assigned citizens. Computes dynamic slot cap from Town Hall level. Cancels event and logs debug line if unassigned and slot available. RoleAssignmentScreen call is a TODO stub. Build clean.
 
 ### Step 5 — Network packets
 - Server → client: citizen name, citizen ID, slots used, slots max, role list.
@@ -408,6 +660,26 @@ All other events are deferred. No functional response to any event — commentar
 | `FLAVOR_NPC_GREETING_COOLDOWN_TICKS` | int | 12000 | Per-NPC, per-player cooldown |
 
 Both values must be in `Config.java`. Never hardcode.
+
+---
+
+## Session Notes — 2026-05-06 — CitizenInteractDetector
+
+Built `CitizenInteractDetector.java` as a new file, registered on `NeoForge.EVENT_BUS` in `DragonTweaks.java`.
+
+**API chain verified against stubs before writing:**
+- Event: `PlayerInteractEvent.EntityInteract` (confirmed in NeoForge stubs)
+- Citizen identity: `instanceof AbstractEntityCitizen` — guarded by `ModList.isLoaded("minecolonies")` to avoid class-not-found on vanilla servers
+- `ICitizenData` retrieval: `AbstractEntityCitizen.getCitizenData()` — null-checked
+- Name/ID: `ICitizen.getName()` and `ICitizen.getId()` — confirmed in `ICitizen.java` stub
+- Job name: `IJob.getNameTagDescription()` — confirmed in `IJob.java` stub; falls back to "unemployed" if null or blank
+- TH level: `colony.getServerBuildingManager().getTownHall().getBuildingLevel()` — chain confirmed across `ICitizen`, `IColony`, `IRegisteredStructureManager`, `ICommonRegisteredStructureManager`, and `ICommonBuilding` stubs; null-checked with fallback level 1
+- Slot count: `RoleAssignmentData.getAssignedCount(playerUUID)` — per-player, matches design intent
+- Slot cap formula: `thLevel < 3 ? 3 : Math.min(thLevel + 1, 6)` — matches locked design decision in devchat.md
+
+**CLAUDE.md path fix:** Updated both session-startup and session-closeout references from `devchat.md` to `docs/devchat.md`.
+
+Build clean after changes.
 
 ---
 

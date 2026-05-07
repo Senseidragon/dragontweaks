@@ -8,7 +8,7 @@ Read this file completely before touching any source file. Do not summarize or s
 ## Session Startup — Required Every Time
 
 Before beginning any task:
-1. Read `devchat.md` in full
+1. Read `docs/devchat.md` in full
 2. Confirm the current branch is `phase-1`
 3. Run `./gradlew build` and confirm it is clean
 4. Report branch and build status before proceeding
@@ -170,7 +170,7 @@ Built JAR ends up in `build/libs/`. Mod metadata is injected at build time from 
 
 After completing any task that touches source files, config, or project structure:
 
-1. Update `devchat.md`:
+1. Update `docs/devchat.md`:
    - Set the `Last updated` date at the top to today's date
    - Update the file table (`What Exists Right Now`) to reflect any files added, removed, or changed
    - Add a session note under `Session Notes` summarizing what was done and any decisions made
