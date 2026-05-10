@@ -34,6 +34,9 @@ bin/
 ### Mac OS ###
 .DS_Store
 
+### Secrets — never commit ###
+.env
+
 ### Local mod JARs (not on public Maven — add manually) ###
 libs/
 

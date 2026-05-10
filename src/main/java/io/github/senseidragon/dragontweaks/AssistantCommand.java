@@ -1,22 +1,30 @@
 package io.github.senseidragon.dragontweaks;
 
+import com.minecolonies.api.colony.IColony;
+import com.minecolonies.api.colony.IColonyManager;
+import com.minecolonies.api.colony.ICitizenData;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.UUID;
 
 @EventBusSubscriber(modid = DragonTweaks.MODID)
 public class AssistantCommand {
@@ -64,6 +72,17 @@ public class AssistantCommand {
                     )
                     .then(Commands.argument("code", StringArgumentType.string())
                         .executes(ctx -> setLocale(ctx, StringArgumentType.getString(ctx, "code")))
+                    )
+                )
+                .then(Commands.literal("advisor")
+                    .executes(AssistantPanelCommand::openAdvisorPanel)
+                )
+                .then(Commands.literal("planner")
+                    .executes(AssistantPanelCommand::openPlannerPanel)
+                )
+                .then(Commands.literal("revoke")
+                    .then(Commands.argument("citizenName", StringArgumentType.greedyString())
+                        .executes(ctx -> revokeByName(ctx, StringArgumentType.getString(ctx, "citizenName")))
                     )
                 )
         );
@@ -235,6 +254,96 @@ public class AssistantCommand {
         }
         final String active = localeOverride;
         ctx.getSource().sendSuccess(() -> Component.literal("Locale override set to: " + active), false);
+        return 1;
+    }
+
+    private static int revokeByName(CommandContext<CommandSourceStack> ctx, String input) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+
+        if (DragonTweaks.LITE_MODE) {
+            ctx.getSource().sendFailure(Component.literal("Role assignment is not available in Lite mode."));
+            return 0;
+        }
+
+        if (!ModList.get().isLoaded("minecolonies")) {
+            ctx.getSource().sendFailure(Component.literal("MineColonies is not loaded."));
+            return 0;
+        }
+
+        MinecraftServer server = player.getServer();
+        ServerLevel overworld = server.getLevel(Level.OVERWORLD);
+        if (overworld == null) return 0;
+
+        RoleAssignmentData roleData = RoleAssignmentData.get(overworld);
+        AdvisorStateData advisorData = AdvisorStateData.get(overworld);
+
+        int matchedCitizenId = -1;
+        String matchedCitizenName = null;
+        String matchedRoleType = null;
+        IColony matchedColony = null;
+        ServerLevel matchedLevel = null;
+
+        search:
+        for (ServerLevel level : server.getAllLevels()) {
+            // TODO: verify IColonyManager.getInstance().getColonies(level) against stubs
+            for (IColony colony : IColonyManager.getInstance().getColonies(level)) {
+                // TODO: verify colony.getCitizenManager().getCitizens() against stubs
+                for (ICitizenData citizen : colony.getCitizenManager().getCitizens()) {
+                    if (!roleData.isAssigned(citizen.getId())) continue;
+                    // TODO: verify ICitizenData.getName() against stubs
+                    String citizenName = citizen.getName();
+                    if (nameMatches(citizenName, input)) {
+                        matchedCitizenId = citizen.getId();
+                        matchedCitizenName = citizenName;
+                        matchedRoleType = roleData.getRecord(matchedCitizenId).roleType();
+                        matchedColony = colony;
+                        matchedLevel = level;
+                        break search;
+                    }
+                }
+            }
+        }
+
+        if (matchedCitizenId == -1) {
+            ctx.getSource().sendFailure(Component.literal("No assigned citizen matching '" + input + "' was found."));
+            return 0;
+        }
+
+        roleData.revoke(matchedCitizenId);
+
+        final String citizenName = matchedCitizenName;
+        ctx.getSource().sendSuccess(() -> Component.literal(citizenName + "'s role has been revoked."), false);
+
+        if ("advisor".equalsIgnoreCase(matchedRoleType)) {
+            UUID playerUUID = player.getUUID();
+            advisorData.setState(playerUUID, AdvisorState.COLONY_NO_CITIZEN);
+            advisorData.setAssignedCitizenId(playerUUID, null);
+
+            UUID advisorEntityUUID = advisorData.getAdvisorEntityUUID(playerUUID);
+            if (advisorEntityUUID != null) {
+                for (ServerLevel level : server.getAllLevels()) {
+                    Entity entity = level.getEntity(advisorEntityUUID);
+                    if (entity instanceof BookAdvisorEntity) {
+                        entity.discard();
+                        break;
+                    }
+                }
+                advisorData.setAdvisorEntityUUID(playerUUID, null);
+            }
+
+            if (matchedColony != null && matchedLevel != null
+                    && matchedColony.getServerBuildingManager().hasTownHall()) {
+                BlockPos thPos = matchedColony.getServerBuildingManager().getTownHall().getPosition();
+                BookAdvisorEntity newAdvisor = ModEntities.BOOK_ADVISOR.get().create(matchedLevel);
+                if (newAdvisor != null) {
+                    newAdvisor.setOwner(player);
+                    newAdvisor.moveTo(thPos.getX() + 0.5, thPos.getY() + 1.0, thPos.getZ() + 0.5, 0f, 0f);
+                    matchedLevel.addFreshEntity(newAdvisor);
+                    advisorData.setAdvisorEntityUUID(playerUUID, newAdvisor.getUUID());
+                }
+            }
+        }
+
         return 1;
     }
 

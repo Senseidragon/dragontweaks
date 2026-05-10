@@ -45,7 +45,7 @@ public class Config {
 
     public static final ModConfigSpec.ConfigValue<String> LLM_MODEL = BUILDER
             .comment("OpenRouter model to use for LLM responses")
-            .define("llmModel", "google/gemma-4-26b-a4b-it");
+            .define("llmModel", ModelConfigLoader.getModel());
 
     public static final ModConfigSpec.IntValue LLM_TIMEOUT_SECONDS = BUILDER
             .comment("Seconds to wait for an LLM response before falling back to templates")
@@ -74,6 +74,26 @@ public class Config {
     public static final ModConfigSpec.DoubleValue ADVISOR_HAPPINESS_THRESHOLD_YELLOW = BUILDER
             .comment("Happiness factor value below which a factor is classified as yellow (mild); must be above red threshold")
             .defineInRange("advisorHappinessThresholdYellow", 0.9, 0.0, 1.0);
+
+    public static final ModConfigSpec.DoubleValue ADVISOR_ENTITY_OFFSET = BUILDER
+            .comment("Distance in blocks the Advisor entity maintains as an offset from the player")
+            .defineInRange("advisorEntityOffset", 1.8, 0.5, 5.0);
+
+    public static final ModConfigSpec.IntValue ADVISOR_HOTBAR_CHECK_TICKS = BUILDER
+            .comment("Ticks between build tool hotbar checks in PRE_COLONY state")
+            .defineInRange("advisorHotbarCheckTicks", 40, 10, 200);
+
+    public static final ModConfigSpec.IntValue ADVISOR_BOUNDARY_DETECTION_RANGE = BUILDER
+            .comment("Blocks from the colony boundary before the Advisor snaps back to Town Hall")
+            .defineInRange("advisorBoundaryDetectionRange", 40, 10, 200);
+
+    public static final ModConfigSpec.IntValue ADVISOR_WHISPER_THRESHOLD = BUILDER
+            .comment("Response length in characters at or above which the Advisor uses the whisper delivery pattern")
+            .defineInRange("advisorWhisperThreshold", 120, 40, 500);
+
+    public static final ModConfigSpec.BooleanValue ADVISOR_FORCE_PRIVATE = BUILDER
+            .comment("Server operator override: force all Advisor responses to private delivery regardless of length")
+            .define("advisorForcePrivate", false);
 
     static final ModConfigSpec SPEC = BUILDER.build();
 

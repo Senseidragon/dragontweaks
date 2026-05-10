@@ -1,7 +1,7 @@
 # DragonTweaks — Current State Document
 *Replaces the original devchat.md as the active reference for Claude Code.*
 *Full session history archived in devchat_archive.md — do not delete.*
-*Last updated: 2026-05-07 (session 9)*
+*Last updated: 2026-05-10 (session 20)*
 
 ---
 
@@ -64,21 +64,25 @@ All source files are in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `AssistantEntity.java` | ✅ Complete | NPC entity, follow/stop, proximity, role, NBT persistence; idle wander (WaterAvoidingRandomStrollGoal), LookAtPlayerGoal, and per-player greeting system added 2026-05-05; wander radius constraint via restrictTo() and MoveTowardsRestrictionGoal added 2026-05-05 (commit 1335c95) |
 | `AssistantRenderer.java` | ✅ Complete | Placeholder zombie renderer |
 | `AssistantRoleRecord.java` | ✅ Complete | Data record: citizenId (int), roleType, assignmentTimestamp, playerUUID, shadowEntityUUID — citizenId added 2026-04-30; shadowEntityUUID is intentional, do not remove |
-| `ChatInterceptor.java` | ✅ Complete | Intercepts player chat, routes to LLM, multi-NPC addressing |
+| `ChatInterceptor.java` | ✅ Complete | Intercepts player chat, routes to LLM, multi-NPC addressing; PRE_COLONY BookAdvisorEntity prompt now includes block scan terrain labels (32×8×32 radius, step 2) added 2026-05-10; scanTerrainLabels extracted to TerrainScanner 2026-05-10 |
+| `TerrainScanner.java` | ✅ Complete | Shared terrain scan utility. `public static String scan(ServerLevel, BlockPos)`. Extracted from ChatInterceptor. Used by both ChatInterceptor and PreColonyScoutTicker. Added 2026-05-10. |
+| `PreColonyScoutTicker.java` | ✅ Complete | Proactive PRE_COLONY scouting observations. 1200-tick interval. Guards: PRE_COLONY state, not flying, moved ≥64 blocks in X or Z, BookAdvisorEntity within 64 blocks. Calls TerrainScanner.scan(), builds custom system prompt, fires async LLM via LLMClient.query(). 1-in-7 dry humor directive. Updates lastObservedPos per player. Added 2026-05-10. |
 | `Config.java` | ✅ Complete | NeoForge ModConfigSpec. See Config section below. ADVISOR_COMMUTE_THRESHOLD, ADVISOR_HAPPINESS_THRESHOLD_RED, ADVISOR_HAPPINESS_THRESHOLD_YELLOW added 2026-05-07. |
 | `ConversationMemory.java` | ✅ Complete | Per-NPC conversation history |
-| `DragonTweaks.java` | ✅ Complete | Main mod class, event bus registration — LevelEvent.Load handler added 2026-05-01; MineColonies CitizenDiedModEvent and BuildingConstructionModEvent handlers added 2026-05-05, guarded by ModList.isLoaded check; CitizenInteractDetector registered 2026-05-06 |
-| `DragonTweaksClient.java` | ✅ Complete | Client-only setup. Packet handler registration moved here (session 9): `registerPackets()` added to constructor, registers both panel packet handlers via `ClientPanelHandler`. |
+| `DragonTweaks.java` | ✅ Complete | Main mod class, event bus registration — LevelEvent.Load handler added 2026-05-01; MineColonies CitizenDiedModEvent and BuildingConstructionModEvent handlers added 2026-05-05, guarded by ModList.isLoaded check; CitizenInteractDetector registered 2026-05-06; ColonyCreatedModEvent, ColonyDeletedModEvent, advisor citizen-lost logic added 2026-05-08; registerServerPackets() added 2026-05-08 to register RoleSelectionPacket playToServer handler |
+| `DragonTweaksClient.java` | ✅ Complete | Client-only setup. Packet handler registration moved here (session 9): `registerPackets()` added to constructor, registers both panel packet handlers via `ClientPanelHandler`; RoleAssignmentPayload handler added inline (session 15). |
 | `DragonTweaksClientEvents.java` | ✅ Complete | Client event bus subscriber |
 | `EnvLoader.java` | ✅ Complete | Reads `.env` file for API key |
 | `FollowPlayerGoal.java` | ✅ Complete | AI goal for follow behavior |
 | `LLMClient.java` | ✅ Complete | OpenRouter async HTTP client — `{"reasoning":{"effort":"none"}}` added to request body 2026-05-07 |
-| `ModEntities.java` | ✅ Complete | Entity type registration |
+| `ModEntities.java` | ✅ Complete | Entity type registration — `BOOK_ADVISOR` DeferredHolder added 2026-05-08; no attribute registration (Entity subclass, not Mob) |
 | `ObservationTicker.java` | ✅ Complete | Proactive NPC observations on server tick — 5 bugs fixed 2026-04-30; greeting trigger loop, raid state-flip poll (IRaiderManager.isRaided()), and fireColonyEventObservation helper added 2026-05-05 |
 | `RolePersona.java` | ✅ Complete | Role keyword → persona block mapping |
 | `RoleAssignmentData.java` | ✅ Complete | SavedData for role assignments — file exists and is correct; updated 2026-04-30 to match AssistantRoleRecord signature |
-| `RoleAssignmentScreen.java` | ❌ Does not exist | Client-side role assignment UI |
-| `CitizenInteractDetector.java` | ✅ Complete | PlayerInteractEvent.EntityInteract handler — citizen check, null-safe ICitizenData retrieval, isAssigned guard, dynamic TH-level slot cap, event cancel + debug log; RoleAssignmentScreen stub only (TODO comment); added 2026-05-06 |
+| `RoleAssignmentScreen.java` | ✅ Complete | Client-side role assignment UI. @OnlyIn(Dist.CLIENT). Extends Screen. Scrollable role list, slot counter, Assign/Cancel buttons. Added 2026-05-08. |
+| `RoleAssignmentPayload.java` | ✅ Complete | Server→client packet. Carries citizenName, citizenId, slotsUsed, slotsMax, availableRoles. AVAILABLE_ROLES constant hardcoded to ["Ranch Hand", "Scout", "Advisor", "Planner"]. Added 2026-05-08. |
+| `RoleSelectionPacket.java` | ✅ Complete | Client→server packet. Carries citizenId, selectedRole. handleOnServer: LITE_MODE guard, isAssigned re-verify, calls RoleAssignmentData.assign(), confirms to player. Added 2026-05-08. |
+| `CitizenInteractDetector.java` | ✅ Complete | PlayerInteractEvent.EntityInteract handler — citizen check, null-safe ICitizenData retrieval, isAssigned guard, dynamic TH-level slot cap, event cancel + debug log; sends RoleAssignmentPayload to player via PacketDistributor.sendToPlayer(). Added 2026-05-06; TODO stub replaced 2026-05-08. |
 | `PlannerDependencyRegistry.java` | ✅ Complete | Singleton. Loads `planner_dependencies.json` from classpath at commonSetup. Resolves dependency graph DFS into pre-computed per-building chains. Public: `getChain(String)`, `findMatches(String)` returning `MatchResult` with exact and substring suggestion lists. Added 2026-05-07. Updated session 9: parses `auto_satisfied` field from JSON into `autoSatisfiedIds`; exposes `isAutoSatisfied(String)`. |
 | `OpenAdvisorPanelPacket.java` | ✅ Complete | Network packet (server→client). Carries `AdvisorPanelPayload`. `handleOnClient` removed session 9 — handler lives in `ClientPanelHandler`. Serialization/deserialization unchanged. Added 2026-05-07. |
 | `OpenPlannerPanelPacket.java` | ✅ Complete | Network packet (server→client). Carries `PlannerPanelPayload`. `handleOnClient` removed session 9 — handler lives in `ClientPanelHandler`. Serialization/deserialization unchanged. Added 2026-05-07. |
@@ -86,6 +90,10 @@ All source files are in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `AssistantPanelCommand.java` | ✅ Complete | Handles `/assistant advisor` and `/assistant planner` subcommands. Sends `OpenAdvisorPanelPacket` / `OpenPlannerPanelPacket` to the executing player. Added 2026-05-07. |
 | `ColonyDiagnosticCache.java` | ✅ Complete | Per-colony cache wrapping ColonyDiagnosticReport. TTL 30s. Static `getOrGenerate(IColony)` + `invalidate(int colonyId)`. Added 2026-05-07. |
 | `ColonyDiagnosticReportGenerator.java` | ✅ Complete | Generates `ColonyDiagnosticReport` from live colony data. Updated session 9: `housingCap` now counts beds from built Residence (×2) and Tavern (×4) buildings via `countBedCapacity()`; replaces old `getMaxCitizens()` proxy. Translation key substrings have TODO pending in-game verification. |
+| `BookAdvisorEntity.java` | ✅ Complete | Lightweight floating entity. Extends `Entity` (not PathfinderMob). No AI goals. No combat. State-aware tick: PRE_COLONY follows player with yaw-relative offset; COLONY_NO_CITIZEN and COLONY_WITH_CITIZEN follow within colony bounds, hold position within ADVISOR_BOUNDARY_DETECTION_RANGE of entity, snap to Town Hall if beyond that range. Colony looked up via IColonyManager.getInstance().getIColony(). MineColonies guard via ModList.isLoaded(). Glow via `setGlowingTag(true)`. NBT persists ownerUUID only. No renderer — placeholder. Updated 2026-05-08. |
+| `AdvisorState.java` | ✅ Complete | Enum: DORMANT, PRE_COLONY, COLONY_NO_CITIZEN, COLONY_WITH_CITIZEN. Added 2026-05-08. |
+| `AdvisorStateData.java` | ✅ Complete | SavedData. Per-player map keyed by UUID. Fields: advisorState, buildToolTriggerFired, assignedCitizenId (nullable), advisorEntityUUID (nullable). Attached to overworld, key "dragontweaks_advisor_state". Added 2026-05-08. |
+| `AdvisorHotbarWatcher.java` | ✅ Complete | `PlayerTickEvent.Post` listener on NeoForge.EVENT_BUS. Server-side only. DORMANT state only — returns immediately in any other state. Scans hotbar slots 0–8 for `structurize:sceptergold` via `BuiltInRegistries.ITEM.getKey()`. On first detection: sets buildToolTriggerFired, transitions state to PRE_COLONY, spawns one BookAdvisorEntity in player's current level, stores entity UUID in AdvisorStateData. AdvisorStateData read/written from overworld SavedData. Added 2026-05-08. |
 | `AdvisorThrottleData.java` | ✅ Complete | SavedData. Stores fired throttle keys as Set<String>. Keys: `"{colonyId}:{citizenId}:{colonyDay}"` (citizen) or `"{colonyId}:systemic:{pattern}:{colonyDay}"`. Attached to overworld level. Added 2026-05-07. |
 | `AdvisorDiagnosticLoop.java` | ✅ Complete | Tick-driven Observe→Diagnose loop. 600-tick interval + dirty flag per colony. Async via CompletableFuture. Throttle check + player delivery on main thread via server.execute(). LLM fired via LLMClient.observe(). Added 2026-05-07. |
 | `AdvisorPanelPayload.java` | ✅ Complete | Server-side data preparation class. Static `build(IColony)` calls `ColonyDiagnosticCache.getOrGenerate()` and assembles payload: environmental flags, systemic pattern (nullable), colony summary header, citizen list ordered red→yellow→healthy with alpha within tiers. Per-citizen collapsed fields (name, worst factor ID+value, tier severity, additional complaints badge, commute flag) and expanded fields (all 10 canonical factors with value+modifier label, commute distance+threshold). Reads three threshold config keys at runtime. Added 2026-05-07. |
@@ -117,6 +125,11 @@ Verify exact field names against source before referencing.
 - `ADVISOR_COMMUTE_THRESHOLD` — int, default 80, range 10–500
 - `ADVISOR_HAPPINESS_THRESHOLD_RED` — double, default 0.5, range 0.0–1.0
 - `ADVISOR_HAPPINESS_THRESHOLD_YELLOW` — double, default 0.9, range 0.0–1.0
+- `ADVISOR_ENTITY_OFFSET` — double, default 1.8, range 0.5–5.0
+- `ADVISOR_HOTBAR_CHECK_TICKS` — int, default 40, range 10–200
+- `ADVISOR_BOUNDARY_DETECTION_RANGE` — int, default 40, range 10–200
+- `ADVISOR_WHISPER_THRESHOLD` — int, default 120, range 40–500
+- `ADVISOR_FORCE_PRIVATE` — boolean, default false
 
 **Does not exist yet — to be added:**
 - *(none — `COMMAND_RADIUS` was eliminated; detection radius and command radius are the same value, read from existing detection config. Do not add a separate COMMAND_RADIUS entry.)*
@@ -570,19 +583,16 @@ These items are small and targeted. Complete them in order before proceeding to 
 ### ~~Step 4~~ ✅ Done — `CitizenInteractDetector.java` built and registered 2026-05-06
 Subscribes to `PlayerInteractEvent.EntityInteract`. Guards client-side and MineColonies not loaded. Casts entity to `AbstractEntityCitizen`, retrieves `ICitizenData` with null check, reads name/id/job. Checks `isAssigned()` to pass through already-assigned citizens. Computes dynamic slot cap from Town Hall level. Cancels event and logs debug line if unassigned and slot available. RoleAssignmentScreen call is a TODO stub. Build clean.
 
-### Step 5 — Network packets
-- Server → client: citizen name, citizen ID, slots used, slots max, role list.
-- Client → server: citizen ID, selected role name.
-- NeoForge 1.21.1 packet registration pattern is known — verify against stubs before writing.
+### ~~Step 5~~ ✅ Done — Network packets (2026-05-08)
+- `RoleAssignmentPayload.java` — server→client CustomPacketPayload. Carries citizenName, citizenId, slotsUsed, slotsMax, availableRoles.
+- `RoleSelectionPacket.java` — client→server CustomPacketPayload. Carries citizenId, selectedRole. Server handler guards LITE_MODE, re-verifies isAssigned, calls RoleAssignmentData.assign(citizenId, roleType, playerUUID).
+- Registered: `playToClient` in DragonTweaksClient.registerPackets(); `playToServer` in DragonTweaks.registerServerPackets() on mod event bus.
 
-### Step 6 — Build `RoleAssignmentScreen.java`
-- Client-side only.
-- Vanilla Minecraft chrome — `renderBackground()` and standard panel/border textures.
-- Reference `AbstractContainerScreen` or equivalent in 1.21.1 sources. Do not invent a look.
-- Title: "Assign Role". Citizen name below title.
-- Slot counter: "X / Y slots used" — from server packet, not hardcoded.
-- Scrollable role list, one button per role. No hardcoded role count.
-- Cancel button closes screen. Assign button disabled until role selected, sends confirmation packet on click.
+### ~~Step 6~~ ✅ Done — `RoleAssignmentScreen.java` (2026-05-08)
+- @OnlyIn(Dist.CLIENT), extends Screen. Panel 210×220.
+- Title "Assign Role", citizen name, slot counter (slotsUsed / slotsMax).
+- Scrollable role list: scissor-clipped, mouseScrolled() wired, rows hit-tested in mouseClicked().
+- Cancel closes. Assign button disabled until row selected; on click sends RoleSelectionPacket and closes.
 
 ### Step 7 — Add `/assistant revoke <citizenName>` to `AssistantCommand.java`
 - Partial case-insensitive name match.
@@ -822,6 +832,154 @@ All other events are deferred. No functional response to any event — commentar
 | `FLAVOR_NPC_GREETING_COOLDOWN_TICKS` | int | 12000 | Per-NPC, per-player cooldown |
 
 Both values must be in `Config.java`. Never hardcode.
+
+---
+
+## Session Notes — 2026-05-10 (session 20) — PreColonyScoutTicker and TerrainScanner extraction
+
+Extracted `scanTerrainLabels` private method from `ChatInterceptor.java` into new shared utility `TerrainScanner.java` with `public static String scan(ServerLevel, BlockPos)`. Removed the private method and its unused `BlockPos` and `Blocks` imports from `ChatInterceptor`. Updated the single call site to use `TerrainScanner.scan()`.
+
+Created `PreColonyScoutTicker.java`: `ServerTickEvent.Post` listener at 1200-tick interval. Per-player guards: PRE_COLONY state, not flying, moved ≥64 blocks in X or Z since last observation, BookAdvisorEntity owned by the player within 64-block AABB. Fires `TerrainScanner.scan()`, builds unsolicited scouting system prompt with terrain/biome/Y/time/weather context. 1-in-7 chance appends dry humor directive via `random.nextInt(7) == 0`. Updates `lastObservedPos` before firing LLM call to prevent double-fire if LLM is slow. Delivers via `LLMClient.query()` with custom system prompt — response arrives as `[Advisor]: [text]`.
+
+Registered `PreColonyScoutTicker::onServerTick` in `DragonTweaks.java` following existing pattern. Build clean.
+
+---
+
+## Session Notes — 2026-05-10 (session 19) — scanTerrainLabels: add village category, refine structures block list
+
+Added `village` boolean to `scanTerrainLabels()` in `ChatInterceptor.java`. Triggered by: BELL, HAY_BLOCK, LECTERN, BLAST_FURNACE, SMOKER, COMPOSTER, FLETCHING_TABLE, CARTOGRAPHY_TABLE. Updated `structures` block list (removed OAK_DOOR, SPRUCE_DOOR, GLASS_PANE). Village takes priority in label output — if both true, only "village" is emitted; "structures" only emitted when village is false. Updated early-exit condition to 12 flags. Build clean.
+
+---
+
+## Session Notes — 2026-05-10 (session 18) — scanTerrainLabels: add structures category
+
+Added `structures` boolean to `scanTerrainLabels()` in `ChatInterceptor.java`. Triggered by: OAK_PLANKS, SPRUCE_PLANKS, COBBLESTONE, STONE_BRICKS, COBBLESTONE_WALL, OAK_DOOR, SPRUCE_DOOR, GLASS_PANE, TORCH, LANTERN. Added as `else if` branch after `ore`. Updated early-exit condition to include `structures` (now 11 flags). Added "structures" to the labels list. Build clean.
+
+---
+
+## Session Notes — 2026-05-10 (session 17) — scanTerrainLabels: remove canSeeSky early return, add stone/ore categories
+
+Removed the `canSeeSky` early-return guard from `scanTerrainLabels()` in `ChatInterceptor.java`. Scan now always runs regardless of sky access. Added two new block categories: `stone` (STONE, DEEPSLATE, COBBLESTONE) and `ore` (COAL_ORE, IRON_ORE, GOLD_ORE, DEEPSLATE_IRON_ORE, DEEPSLATE_GOLD_ORE). Updated boolean declarations, scan loop, early-exit condition (now 10 flags), and labels list. Build clean.
+
+---
+
+## Session Notes — 2026-05-10 (session 16) — PRE_COLONY block scan terrain labels
+
+Added `scanTerrainLabels(ServerLevel, BlockPos)` private method to `ChatInterceptor.java`. Scans 32-block X/Z radius, 4 up/4 down Y, step 2. Tracks presence (boolean) of 8 categories: ice, snow, water, lava, sand, gravel, farmland, forest. Builds comma-separated label string; returns "none notable" if nothing detected. Early-exits once all 8 flags set. Added `"Nearby terrain: " + terrainLabels + ".\n"` line to the PRE_COLONY `bookAdvisor` scoped prompt, after the existing `"Nearby: "` line. Added `BlockPos` and `Blocks` imports. Build clean.
+
+---
+
+## Session Notes — 2026-05-08 (session 15) — Role assignment packets and screen
+
+Created three new files and updated three existing files. Build clean.
+
+**RoleAssignmentPayload.java** — implements `CustomPacketPayload`. Record with 5 fields. `AVAILABLE_ROLES` constant `List.of("Ranch Hand", "Scout", "Advisor", "Planner")` — hardcoded, not from config per spec. Encode/decode via `FriendlyByteBuf`. Registered `playToClient` in `DragonTweaksClient.registerPackets()`.
+
+**RoleSelectionPacket.java** — implements `CustomPacketPayload`. Record: `citizenId`, `selectedRole`. `handleOnServer()`: LITE_MODE early return → cast `ctx.player()` to `ServerPlayer` → get `RoleAssignmentData` from overworld SavedData → `isAssigned` re-verify → `assign(citizenId, selectedRole, playerUUID)` → confirmation message. `assign()` confirmed as 3-param: `(int citizenId, String roleType, UUID playerUUID)` — no shadowEntityUUID parameter (RoleAssignmentData stores null internally). Registered `playToServer` in new `DragonTweaks.registerServerPackets()` on mod event bus.
+
+**RoleAssignmentScreen.java** — @OnlyIn(Dist.CLIENT). Panel 210×220, scissor-clipped role list, scroll offset tracked via `mouseScrolled()`. Role rows rendered as fill+drawString (not Button widgets) to support scrollable click hit-testing cleanly. `mouseClicked()` hit-tests rows after button delegation. Assign button `active = false` until a row is selected; on click calls `PacketDistributor.sendToServer(new RoleSelectionPacket(...))` and closes.
+
+**CitizenInteractDetector.java** — replaced TODO stub. After slot check passes: casts player to `ServerPlayer`, calls `PacketDistributor.sendToPlayer(serverPlayer, new RoleAssignmentPayload(name, citizenId, slotsUsed, maxSlots, AVAILABLE_ROLES))`.
+
+**DragonTweaksClient.java** — added `Minecraft` import; added `RoleAssignmentPayload` handler inline in `registerPackets()` as lambda: `(packet, ctx) -> ctx.enqueueWork(() -> Minecraft.getInstance().setScreen(new RoleAssignmentScreen(packet)))`.
+
+**DragonTweaks.java** — added `RegisterPayloadHandlersEvent` import; added `modEventBus.addListener(this::registerServerPackets)` in constructor; added `registerServerPackets()` method calling `event.registrar(MODID).playToServer(...)`.
+
+---
+
+## Session Notes — 2026-05-08 (session 14) — BookAdvisorEntity state-aware movement
+
+Modified `BookAdvisorEntity.java` tick logic to be state-aware.
+
+**Stub verifications performed:**
+- `IColony.isCoordInColony(Level, BlockPos)` — confirmed at IColony.java line 12
+- `IColonyManager.getInstance().getIColony(Level, BlockPos)` — confirmed at IColonyManager.java line 19
+- `colony.getServerBuildingManager().getTownHall().getPosition()` — already verified in session 13; `hasTownHall()` guard pattern reused from same session
+
+**Behavior:**
+- PRE_COLONY or DORMANT: existing follow behavior (yaw-relative offset).
+- COLONY_NO_CITIZEN or COLONY_WITH_CITIZEN, MineColonies loaded: look up colony via `getIColony(level, entityBlockPos)`. If null, fall back to follow. If player is inside colony (`isCoordInColony`): follow with offset. If player is outside colony but within `ADVISOR_BOUNDARY_DETECTION_RANGE` of entity: hold position (no setPos). If beyond that range: snap to Town Hall via `getServerBuildingManager().getTownHall().getPosition()`, guarded by `hasTownHall()`.
+- MineColonies not loaded in colony state: fall back to follow.
+
+**Refactor:** Extracted `followPlayer(Player)` private helper to eliminate duplicate offset logic.
+
+Build clean.
+
+---
+
+## Session Notes — 2026-05-08 (session 13) — Colony event handlers and advisor citizen-lost logic
+
+Added three new MineColonies event handlers to `DragonTweaks.java` inside the existing `ModList.isLoaded("minecolonies")` guard.
+
+**Stub verifications performed:**
+- `IPermissions.getOwner()` → `UUID` — confirmed in `IPermissions.java` stub
+- `ICitizen.getId()` → `int` — confirmed in `ICitizen.java` stub via `AbstractCitizenModEvent.getCitizen()`
+- `colony.getServerBuildingManager().getTownHall().getPosition()` → `BlockPos` — confirmed via `ICommonBuilding.getPosition()` stub
+- `ColonyCreatedModEvent` / `ColonyDeletedModEvent` → both extend `AbstractColonyModEvent` with `getColony()` only; player UUID derived via `getColony().getPermissions().getOwner()`
+
+**ColonyCreatedModEvent handler:** LITE_MODE guard → get owner UUID via `colony.getPermissions().getOwner()` → check state is PRE_COLONY → transition to COLONY_NO_CITIZEN → send one-time greeting message guarded by session-only `colonyGreetedPlayers` Set<UUID>.
+
+**ColonyDeletedModEvent handler:** LITE_MODE guard → check state is COLONY_NO_CITIZEN or COLONY_WITH_CITIZEN → despawn existing entity (UUID lookup across all server levels) → spawn new BookAdvisorEntity at player's current position in player's current level → transition to PRE_COLONY → clear assignedCitizenId → update advisorEntityUUID.
+
+**CitizenDiedModEvent and CitizenJobChangedModEvent:** Added `if (!LITE_MODE)` advisor logic call at end of each existing handler. Cache invalidation unchanged. Shared logic extracted into `private static handleAdvisorCitizenLost(IColony, int, ServerLevel)`: checks COLONY_WITH_CITIZEN state and assignedCitizenId match → despawns entity → spawns BookAdvisorEntity at Town Hall position (guarded by `hasTownHall()`) → transitions to COLONY_NO_CITIZEN → clears assignedCitizenId → sends "Your advisor's role is now vacant." message.
+
+**New field:** `private static final Set<UUID> colonyGreetedPlayers` — session-only, same pattern as `liteModeNotified`.
+
+Build clean.
+
+---
+
+## Session Notes — 2026-05-08 (session 12) — AdvisorHotbarWatcher
+
+Created `AdvisorHotbarWatcher.java`. Registered on `NeoForge.EVENT_BUS` as `PlayerTickEvent.Post` listener.
+
+**Event:** `PlayerTickEvent.Post` — confirmed against stub at `net.neoforged.neoforge.event.tick.PlayerTickEvent`. Inner class `.Post` pattern matches existing `ServerTickEvent.Post` usage in ObservationTicker/AdvisorDiagnosticLoop.
+
+**Server guard:** `!(player.level() instanceof ServerLevel)` early return — no client execution.
+
+**State guard:** Returns immediately unless state is DORMANT and `buildToolTriggerFired` is false — completely inactive in PRE_COLONY, COLONY_NO_CITIZEN, COLONY_WITH_CITIZEN.
+
+**Hotbar scan:** `player.getInventory().getItem(slot)` for slots 0–8. Item identity via `BuiltInRegistries.ITEM.getKey(stack.getItem())` compared to `ResourceLocation.fromNamespaceAndPath("structurize", "sceptergold")`. No vanilla/NeoForge stubs exist for Player or Inventory — APIs confirmed from vanilla 1.21.1 knowledge. `ResourceLocation.fromNamespaceAndPath()` form confirmed from existing code in AssistantRenderer, ModEntities.
+
+**Spawn:** `ModEntities.BOOK_ADVISOR.get().create(serverLevel)`. `entity.setOwner(player)`. `entity.moveTo(x, y+1.0, z, 0f, 0f)`. `serverLevel.addFreshEntity(entity)`. Entity spawned in player's current level (any dimension). Entity UUID stored in AdvisorStateData via overworld SavedData.
+
+**AdvisorStateData access:** Always reads/writes from `serverLevel.getServer().getLevel(Level.OVERWORLD)` — SavedData is attached to overworld only.
+
+Updated `DragonTweaks.java`: added `NeoForge.EVENT_BUS.addListener(AdvisorHotbarWatcher::onPlayerTick)` following existing pattern.
+
+Build clean.
+
+---
+
+## Session Notes — 2026-05-08 (session 11) — BookAdvisorEntity, ModEntities registration
+
+Created `BookAdvisorEntity.java`. Extends `Entity` (vanilla root, not PathfinderMob). No AI, no combat, no role assignment.
+
+**Base class:** `Entity` — vanilla entity class stubs are not present in docs/stubs (stubs cover only MineColonies and NeoForge APIs). Base class selection is confirmed from 1.21.1 knowledge: Entity is the correct lightest non-mob base.
+
+**Glow:** `setGlowingTag(true)` called in constructor — vanilla Entity method, present since 1.17+, confirmed correct for 1.21.1. Does not require LivingEntity.
+
+**Follow logic:** `tick()` runs server-side only. Reads `Config.ADVISOR_ENTITY_OFFSET` each tick. Computes right-perpendicular vector from player yaw (`cos(yawRad)`, `sin(yawRad)`), adds 0.5-block behind component (`sin(yawRad)`, `-cos(yawRad)`). Sets entity Y to player.getY()+1.0.
+
+**Required abstract:** `defineSynchedData(SynchedEntityData.Builder)` — implemented empty (no custom synced data).
+
+**NBT:** ownerUUID only. Written if non-null, read back safely.
+
+Updated `ModEntities.java`: added `BOOK_ADVISOR` DeferredHolder using same `.of()/.sized()/.clientTrackingRange()/.build()` chain as ASSISTANT. No entry in `onAttributeCreate` — Entity subclasses do not register attributes.
+
+Build clean.
+
+---
+
+## Session Notes — 2026-05-08 (session 10) — AdvisorState enum, AdvisorStateData SavedData, Config advisor values
+
+Created `AdvisorState.java` — four-value enum: DORMANT, PRE_COLONY, COLONY_NO_CITIZEN, COLONY_WITH_CITIZEN.
+
+Created `AdvisorStateData.java` — NeoForge SavedData following RoleAssignmentData pattern exactly. Per-player state stored in `Map<UUID, PlayerAdvisorState>`. `PlayerAdvisorState` inner class holds: `advisorState` (default DORMANT), `buildToolTriggerFired` (default false), `assignedCitizenId` (nullable Integer), `advisorEntityUUID` (nullable UUID). Full NBT serialization — optional fields written only when non-null, graceful enum fallback to DORMANT on unknown value. Static `get(ServerLevel)` attached to overworld at key "dragontweaks_advisor_state". Public API: `getOrCreate`, `setState`, `getState`, `setBuildToolTriggerFired`, `hasBuildToolTriggerFired`, `setAssignedCitizenId`, `getAssignedCitizenId`, `setAdvisorEntityUUID`, `getAdvisorEntityUUID`.
+
+Added five config values to `Config.java`: `ADVISOR_ENTITY_OFFSET` (double, 1.8, 0.5–5.0), `ADVISOR_HOTBAR_CHECK_TICKS` (int, 40, 10–200), `ADVISOR_BOUNDARY_DETECTION_RANGE` (int, 40, 10–200), `ADVISOR_WHISPER_THRESHOLD` (int, 120, 40–500), `ADVISOR_FORCE_PRIVATE` (boolean, false).
+
+Build clean.
 
 ---
 

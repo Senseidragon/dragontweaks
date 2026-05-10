@@ -1,5 +1,6 @@
 package io.github.senseidragon.dragontweaks;
 
+import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -25,7 +26,10 @@ public class DragonTweaksClient {
                 .playToClient(OpenAdvisorPanelPacket.TYPE, OpenAdvisorPanelPacket.STREAM_CODEC,
                         ClientPanelHandler::handleAdvisorPanel)
                 .playToClient(OpenPlannerPanelPacket.TYPE, OpenPlannerPanelPacket.STREAM_CODEC,
-                        ClientPanelHandler::handlePlannerPanel);
+                        ClientPanelHandler::handlePlannerPanel)
+                .playToClient(RoleAssignmentPayload.TYPE, RoleAssignmentPayload.STREAM_CODEC,
+                        (packet, ctx) -> ctx.enqueueWork(() ->
+                                Minecraft.getInstance().setScreen(new RoleAssignmentScreen(packet))));
     }
 
     @SubscribeEvent

@@ -21,7 +21,16 @@ public class ModEntities {
                             .build(ResourceLocation.fromNamespaceAndPath(DragonTweaks.MODID, "assistant").toString())
             );
 
+    public static final DeferredHolder<EntityType<?>, EntityType<BookAdvisorEntity>> BOOK_ADVISOR =
+            ENTITY_TYPES.register("book_advisor", () ->
+                    EntityType.Builder.<BookAdvisorEntity>of(BookAdvisorEntity::new, MobCategory.MISC)
+                            .sized(0.4f, 0.4f)
+                            .clientTrackingRange(10)
+                            .build(ResourceLocation.fromNamespaceAndPath(DragonTweaks.MODID, "book_advisor").toString())
+            );
+
     public static void onAttributeCreate(EntityAttributeCreationEvent event) {
         event.put(ASSISTANT.get(), AssistantEntity.createAttributes());
+        // BookAdvisorEntity extends Entity (not Mob) — no attributes to register
     }
 }

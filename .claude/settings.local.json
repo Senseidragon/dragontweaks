@@ -62,7 +62,15 @@
       "Bash(unzip *)",
       "Bash(xargs cat *)",
       "WebSearch",
-      "WebFetch(domain:openrouter.ai)"
+      "WebFetch(domain:openrouter.ai)",
+      "Bash(grep -v \"DEBUG\\\\|MODFILE\\\\|ModFile\\\\|mods\\\\\\\\\\\\\\\\\")",
+      "Bash(grep -iv \"debug\\\\|modfile\\\\|mods\\\\\\\\\\\\\\\\\\\\|missing entity\\\\|auth.mine\\\\|reload\\\\|shutdown\\\\|chunk\\\\|saving\\\\|ftbchunk\\\\|worker-resource\\\\|modernfix\\\\|structurize\\\\|logoff\\\\|logging\")",
+      "Bash(where java *)",
+      "Bash(java -version)",
+      "Bash(gzip -dc ./data/dragontweaks_advisor_state.dat)",
+      "Bash(grep -E \"[A-Za-z0-9-]{8,}\")",
+      "Bash(grep -E '.{4,}')",
+      "Bash(python *)"
     ]
   }
 }

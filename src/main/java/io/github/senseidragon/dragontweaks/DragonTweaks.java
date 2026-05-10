@@ -1,6 +1,9 @@
 package io.github.senseidragon.dragontweaks;
 
 import com.minecolonies.api.IMinecoloniesAPI;
+import com.minecolonies.api.colony.IColony;
+import com.minecolonies.api.eventbus.events.colony.ColonyCreatedModEvent;
+import com.minecolonies.api.eventbus.events.colony.ColonyDeletedModEvent;
 import com.minecolonies.api.eventbus.events.colony.buildings.BuildingConstructionModEvent;
 import com.minecolonies.api.eventbus.events.colony.citizens.CitizenAddedModEvent;
 import com.minecolonies.api.eventbus.events.colony.citizens.CitizenDiedModEvent;
@@ -8,8 +11,15 @@ import com.minecolonies.api.eventbus.events.colony.citizens.CitizenJobChangedMod
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -20,11 +30,16 @@ import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
 @Mod(DragonTweaks.MODID)
 public class DragonTweaks {
     public static final String MODID = "dragontweaks";
     public static final Logger LOGGER = LogUtils.getLogger();
+
+    public static boolean LITE_MODE = false;
+    private static final Set<UUID> liteModeNotified = new HashSet<>();
+    private static final Set<UUID> colonyGreetedPlayers = new HashSet<>();
 
     public DragonTweaks(IEventBus modEventBus, ModContainer modContainer) {
         ModEntities.ENTITY_TYPES.register(modEventBus);
@@ -42,7 +57,22 @@ public class DragonTweaks {
         NeoForge.EVENT_BUS.addListener(ChatInterceptor::onServerChat);
         NeoForge.EVENT_BUS.addListener(ObservationTicker::onServerTick);
         NeoForge.EVENT_BUS.addListener(AdvisorDiagnosticLoop::onServerTick);
+        NeoForge.EVENT_BUS.addListener(AdvisorHotbarWatcher::onPlayerTick);
+        NeoForge.EVENT_BUS.addListener(PreColonyScoutTicker::onServerTick);
         NeoForge.EVENT_BUS.addListener((ServerStoppingEvent e) -> LLMClient.shutdown());
+        modEventBus.addListener(this::registerServerPackets);
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent e) -> {
+            if (LITE_MODE && e.getEntity() instanceof ServerPlayer sp && liteModeNotified.add(sp.getUUID())) {
+                sp.sendSystemMessage(Component.literal(
+                    "Assistant Mod is running in Lite mode. Add an OpenRouter API key in config to unlock full AI companion features."));
+            }
+        });
+    }
+
+    private void registerServerPackets(RegisterPayloadHandlersEvent event) {
+        event.registrar(MODID)
+                .playToServer(RoleSelectionPacket.TYPE, RoleSelectionPacket.STREAM_CODEC,
+                        RoleSelectionPacket::handleOnServer);
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
@@ -50,10 +80,12 @@ public class DragonTweaks {
 
         String apiKey = EnvLoader.get("OPENROUTER_API_KEY");
         if (apiKey == null || apiKey.isBlank() || apiKey.equals("your-api-key-here")) {
-            throw new IllegalStateException(
-                "DragonTweaks: No OpenRouter API key found. Set your key in the .env file.");
+            LITE_MODE = true;
+            LOGGER.warn("DragonTweaks: No OpenRouter API key found — running in Lite mode.");
+        } else {
+            LITE_MODE = false;
+            LOGGER.info("DragonTweaks loaded — LLM endpoint: {}", Config.LLM_ENDPOINT.get());
         }
-        LOGGER.info("DragonTweaks loaded — LLM endpoint: {}", Config.LLM_ENDPOINT.get());
 
         event.enqueueWork(() -> {
             if (!ModList.get().isLoaded("minecolonies")) return;
@@ -66,6 +98,9 @@ public class DragonTweaks {
                 String citizenName = e.getCitizen().getName();
                 String prompt = citizenName + " has died. React with grief or shock in character.";
                 ObservationTicker.fireColonyEventObservation(level.getServer(), level, prompt);
+                if (!LITE_MODE) {
+                    handleAdvisorCitizenLost(e.getColony(), e.getCitizen().getId(), level);
+                }
             });
 
             IMinecoloniesAPI.getInstance().getEventBus().subscribe(BuildingConstructionModEvent.class, e -> {
@@ -83,6 +118,9 @@ public class DragonTweaks {
                 int colonyId = e.getColony().getID();
                 ColonyDiagnosticCache.invalidate(colonyId);
                 AdvisorDiagnosticLoop.markDirty(colonyId);
+                if (!LITE_MODE && e.getColony().getWorld() instanceof ServerLevel level) {
+                    handleAdvisorCitizenLost(e.getColony(), e.getCitizen().getId(), level);
+                }
             });
 
             IMinecoloniesAPI.getInstance().getEventBus().subscribe(CitizenAddedModEvent.class, e -> {
@@ -90,6 +128,87 @@ public class DragonTweaks {
                 ColonyDiagnosticCache.invalidate(colonyId);
                 AdvisorDiagnosticLoop.markDirty(colonyId);
             });
+
+            IMinecoloniesAPI.getInstance().getEventBus().subscribe(ColonyCreatedModEvent.class, e -> {
+                if (LITE_MODE) return;
+                UUID playerUUID = e.getColony().getPermissions().getOwner();
+                if (!(e.getColony().getWorld() instanceof ServerLevel serverLevel)) return;
+                AdvisorStateData stateData = AdvisorStateData.get(serverLevel.getServer().getLevel(Level.OVERWORLD));
+                if (stateData.getState(playerUUID) != AdvisorState.PRE_COLONY) return;
+                stateData.setState(playerUUID, AdvisorState.COLONY_NO_CITIZEN);
+                if (colonyGreetedPlayers.add(playerUUID)) {
+                    ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(playerUUID);
+                    if (player != null) {
+                        player.sendSystemMessage(Component.literal(
+                            "A colony has been established. I'll be staying close from now on. If you need me, say 'Advisor' followed by your question \u2014 but only while you're within the colony bounds."));
+                    }
+                }
+            });
+
+            IMinecoloniesAPI.getInstance().getEventBus().subscribe(ColonyDeletedModEvent.class, e -> {
+                if (LITE_MODE) return;
+                UUID playerUUID = e.getColony().getPermissions().getOwner();
+                if (!(e.getColony().getWorld() instanceof ServerLevel serverLevel)) return;
+                ServerLevel overworld = serverLevel.getServer().getLevel(Level.OVERWORLD);
+                AdvisorStateData stateData = AdvisorStateData.get(overworld);
+                AdvisorState currentState = stateData.getState(playerUUID);
+                if (currentState != AdvisorState.COLONY_NO_CITIZEN && currentState != AdvisorState.COLONY_WITH_CITIZEN) return;
+                UUID entityUUID = stateData.getAdvisorEntityUUID(playerUUID);
+                if (entityUUID != null) {
+                    for (ServerLevel lvl : serverLevel.getServer().getAllLevels()) {
+                        Entity existing = lvl.getEntity(entityUUID);
+                        if (existing != null) { existing.discard(); break; }
+                    }
+                }
+                ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(playerUUID);
+                if (player != null && player.level() instanceof ServerLevel playerLevel) {
+                    BookAdvisorEntity newEntity = ModEntities.BOOK_ADVISOR.get().create(playerLevel);
+                    if (newEntity != null) {
+                        newEntity.setOwner(player);
+                        newEntity.moveTo(player.getX(), player.getY() + 1.0, player.getZ(), 0f, 0f);
+                        playerLevel.addFreshEntity(newEntity);
+                        stateData.setAdvisorEntityUUID(playerUUID, newEntity.getUUID());
+                    }
+                } else {
+                    stateData.setAdvisorEntityUUID(playerUUID, null);
+                }
+                stateData.setState(playerUUID, AdvisorState.PRE_COLONY);
+                stateData.setAssignedCitizenId(playerUUID, null);
+            });
         });
+    }
+
+    private static void handleAdvisorCitizenLost(IColony colony, int citizenId, ServerLevel level) {
+        UUID playerUUID = colony.getPermissions().getOwner();
+        ServerLevel overworld = level.getServer().getLevel(Level.OVERWORLD);
+        AdvisorStateData stateData = AdvisorStateData.get(overworld);
+        if (stateData.getState(playerUUID) != AdvisorState.COLONY_WITH_CITIZEN) return;
+        Integer assignedId = stateData.getAssignedCitizenId(playerUUID);
+        if (assignedId == null || assignedId.intValue() != citizenId) return;
+        UUID entityUUID = stateData.getAdvisorEntityUUID(playerUUID);
+        if (entityUUID != null) {
+            for (ServerLevel lvl : level.getServer().getAllLevels()) {
+                Entity existing = lvl.getEntity(entityUUID);
+                if (existing != null) { existing.discard(); break; }
+            }
+        }
+        if (colony.getServerBuildingManager().hasTownHall()) {
+            BlockPos thPos = colony.getServerBuildingManager().getTownHall().getPosition();
+            BookAdvisorEntity newEntity = ModEntities.BOOK_ADVISOR.get().create(level);
+            if (newEntity != null) {
+                newEntity.moveTo(thPos.getX() + 0.5, thPos.getY() + 1.0, thPos.getZ() + 0.5, 0f, 0f);
+                level.addFreshEntity(newEntity);
+                stateData.setAdvisorEntityUUID(playerUUID, newEntity.getUUID());
+            }
+        } else {
+            stateData.setAdvisorEntityUUID(playerUUID, null);
+        }
+        stateData.setState(playerUUID, AdvisorState.COLONY_NO_CITIZEN);
+        stateData.setAssignedCitizenId(playerUUID, null);
+        ServerPlayer player = level.getServer().getPlayerList().getPlayer(playerUUID);
+        if (player != null) {
+            player.sendSystemMessage(Component.literal(
+                "Your advisor's role is now vacant. Assign a new citizen to restore full capability."));
+        }
     }
 }

@@ -121,6 +121,14 @@ public class AdvisorPanelPayload {
 
     // ---- Factory ----
 
+    /** Network deserialization path — bypasses build() and constructs directly from received fields. */
+    static AdvisorPanelPayload fromNetwork(List<ColonyDiagnosticReport.EnvironmentalFlag> flags,
+                                          ColonyDiagnosticReport.SystemicPattern pattern,
+                                          double overallHappiness, int citizenCount, int housingCap,
+                                          List<CitizenEntry> citizens) {
+        return new AdvisorPanelPayload(flags, pattern, overallHappiness, citizenCount, housingCap, citizens);
+    }
+
     public static AdvisorPanelPayload build(IColony colony) {
         ColonyDiagnosticReport report = ColonyDiagnosticCache.getOrGenerate(colony);
 

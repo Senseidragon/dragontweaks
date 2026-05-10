@@ -56,7 +56,7 @@ public class LLMClient {
     }
 
     private static final Gson GSON = new Gson();
-    private static final int MAX_RESPONSE_TOKENS = 100;
+    private static final int MAX_RESPONSE_TOKENS = 200;
 
     private static String buildSystemPrompt(String npcName, String role, String playerName,
                                              String timeOfDay, String weather, String surroundings) {
@@ -256,6 +256,27 @@ public class LLMClient {
             server.execute(() -> sendFallback(player, entityName));
             return;
         }
+        String npcName = entityName.getString();
+        String playerName = player.getGameProfile().getName();
+        String locale = AssistantCommand.localeOverride != null ? AssistantCommand.localeOverride : "en_us";
+        String systemPrompt = buildSystemPrompt(npcName, role, playerName, timeOfDay, weather, surroundings)
+                + "Always respond in the language identified by locale code: " + locale + ".\n";
+        queryWithPrompt(server, player, entityName, message, npcId, systemPrompt);
+    }
+
+    public static void query(MinecraftServer server, ServerPlayer player,
+                             Component entityName, String message,
+                             UUID npcId, String systemPrompt) {
+        if (!Config.LLM_ENABLED.get()) {
+            server.execute(() -> sendFallback(player, entityName));
+            return;
+        }
+        queryWithPrompt(server, player, entityName, message, npcId, systemPrompt);
+    }
+
+    private static void queryWithPrompt(MinecraftServer server, ServerPlayer player,
+                                        Component entityName, String message,
+                                        UUID npcId, String systemPrompt) {
         ensureAlive();
 
         String apiKey = EnvLoader.get("OPENROUTER_API_KEY");
@@ -267,13 +288,10 @@ public class LLMClient {
 
         String npcName = entityName.getString();
         String playerName = player.getGameProfile().getName();
-        String locale = AssistantCommand.localeOverride != null ? AssistantCommand.localeOverride : "en_us";
         String history = ConversationMemory.getHistory(npcId, playerName);
         String userContent = history.isEmpty()
             ? playerName + " says: " + message
             : "[Prior conversation:]\n" + history + "\n\n" + playerName + " says: " + message;
-        String systemPrompt = buildSystemPrompt(npcName, role, playerName, timeOfDay, weather, surroundings)
-                + "Always respond in the language identified by locale code: " + locale + ".\n";
         String requestBody = buildRequestBody(Config.LLM_MODEL.get(), userContent, systemPrompt);
 
         HttpRequest request;

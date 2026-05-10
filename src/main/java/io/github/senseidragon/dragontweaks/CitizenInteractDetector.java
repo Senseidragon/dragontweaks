@@ -6,10 +6,12 @@ import com.minecolonies.api.colony.jobs.IJob;
 import com.minecolonies.api.entity.citizen.AbstractEntityCitizen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 public class CitizenInteractDetector {
 
@@ -47,6 +49,9 @@ public class CitizenInteractDetector {
 
         event.setCanceled(true);
         DragonTweaks.LOGGER.debug("[DragonTweaks] Clicked citizen: {}, Job: {}, ID: {}", name, jobName, citizenId);
-        // TODO: open RoleAssignmentScreen
+        if (!(player instanceof ServerPlayer serverPlayer)) return;
+        int slotsUsed = roleData.getAssignedCount(player.getUUID());
+        PacketDistributor.sendToPlayer(serverPlayer, new RoleAssignmentPayload(
+                name, citizenId, slotsUsed, maxSlots, RoleAssignmentPayload.AVAILABLE_ROLES));
     }
 }

@@ -3363,6 +3363,14 @@ The build tool is *THE* most important tool in the entire mod! With it, you can 
 
 The first step is to craft the build tool. You can also get a build tool in the {% item_page name="supply_camp_and_ship" /%} in the same rack as the {% building name="townhall" /%}.
 
+**Recipe** (crafting table):
+
+| | | |
+|---|---|---|
+| | | Cobblestone |
+| | Stick | |
+| Stick | | |
+
 ### Step Two: Designating a Building Location
 
 To place a worker hut or building from the mod, you'll first need to craft the specific block for that building (see [Recipes](/wiki/misc/recipes)). Then, right-click with the build tool on a solid block where you want to place that building. The GUI will pop up:
