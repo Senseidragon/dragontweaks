@@ -2,6 +2,7 @@ package io.github.senseidragon.dragontweaks;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.StructureTags;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.levelgen.Heightmap;
 
@@ -13,7 +14,7 @@ public class TerrainScanner {
     public static String scan(ServerLevel level, BlockPos center) {
         boolean ice = false, snow = false, water = false, lava = false,
                 sand = false, gravel = false, farmland = false, forest = false,
-                stone = false, ore = false, structures = false, village = false,
+                stone = false, ore = false, structures = false,
                 crops = false;
         int cx = center.getX(), cy = center.getY(), cz = center.getZ();
         outer:
@@ -33,11 +34,14 @@ public class TerrainScanner {
                     else if (!stone && (block == Blocks.STONE || block == Blocks.DEEPSLATE || block == Blocks.COBBLESTONE)) stone = true;
                     else if (!ore && (block == Blocks.COAL_ORE || block == Blocks.IRON_ORE || block == Blocks.GOLD_ORE || block == Blocks.DEEPSLATE_IRON_ORE || block == Blocks.DEEPSLATE_GOLD_ORE)) ore = true;
                     else if (!structures && (block == Blocks.OAK_PLANKS || block == Blocks.SPRUCE_PLANKS || block == Blocks.COBBLESTONE_SLAB || block == Blocks.COBBLESTONE_STAIRS || block == Blocks.STONE_BRICKS || block == Blocks.COBBLESTONE_WALL || block == Blocks.TORCH || block == Blocks.LANTERN)) structures = true;
-                    else if (!village && (block == Blocks.BELL || block == Blocks.HAY_BLOCK || block == Blocks.LECTERN || block == Blocks.BLAST_FURNACE || block == Blocks.SMOKER || block == Blocks.COMPOSTER || block == Blocks.FLETCHING_TABLE || block == Blocks.CARTOGRAPHY_TABLE)) village = true;
-                    if (ice && snow && water && lava && sand && gravel && farmland && forest && stone && ore && structures && village && crops) break outer;
+                    if (ice && snow && water && lava && sand && gravel && farmland && forest && stone && ore && structures && crops) break outer;
                 }
             }
         }
+
+        // Village detection via structure registry — 300-block radius (~19 chunks)
+        BlockPos villagePos = level.findNearestMapStructure(StructureTags.VILLAGE, center, 19, false);
+
         List<String> labels = new ArrayList<>();
         if (ice) labels.add("ice");
         if (snow) labels.add("snow");
@@ -50,8 +54,13 @@ public class TerrainScanner {
         if (forest) labels.add("forest");
         if (stone) labels.add("stone");
         if (ore) labels.add("ore");
-        if (village) labels.add("village");
-        else if (structures) labels.add("structures");
+        if (villagePos != null) {
+            int dx = villagePos.getX() - center.getX();
+            int dz = villagePos.getZ() - center.getZ();
+            int dist = (int) Math.sqrt(dx * dx + dz * dz);
+            labels.add("village to the " + compassDir(dx, dz) + " (~" + dist + " blocks)");
+        }
+        if (structures && villagePos == null) labels.add("structures");
         String terrainLine = labels.isEmpty() ? "none notable" : String.join(", ", labels);
 
         List<Integer> yValues = new ArrayList<>();
@@ -69,5 +78,18 @@ public class TerrainScanner {
         String relief = stdDev < 3.0 ? "flat" : stdDev <= 8.0 ? "rolling" : "steep";
 
         return terrainLine + "\nTerrain relief: " + relief;
+    }
+
+    private static String compassDir(int dx, int dz) {
+        double angle = Math.toDegrees(Math.atan2(dz, dx));
+        if (angle < 0) angle += 360;
+        if (angle < 22.5 || angle >= 337.5) return "east";
+        if (angle < 67.5)  return "southeast";
+        if (angle < 112.5) return "south";
+        if (angle < 157.5) return "southwest";
+        if (angle < 202.5) return "west";
+        if (angle < 247.5) return "northwest";
+        if (angle < 292.5) return "north";
+        return "northeast";
     }
 }

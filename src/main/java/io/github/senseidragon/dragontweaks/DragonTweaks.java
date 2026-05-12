@@ -21,6 +21,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.ModList;
@@ -40,6 +41,7 @@ public class DragonTweaks {
     public static boolean LITE_MODE = false;
     private static final Set<UUID> liteModeNotified = new HashSet<>();
     private static final Set<UUID> colonyGreetedPlayers = new HashSet<>();
+    private static final Set<UUID> citizenArrivalNotifiedPlayers = new HashSet<>();
 
     public DragonTweaks(IEventBus modEventBus, ModContainer modContainer) {
         ModEntities.ENTITY_TYPES.register(modEventBus);
@@ -50,11 +52,21 @@ public class DragonTweaks {
         NeoForge.EVENT_BUS.addListener((LevelEvent.Load e) -> {
             if (e.getLevel() instanceof ServerLevel serverLevel
                     && serverLevel.dimension() == Level.OVERWORLD) {
-                RoleAssignmentData.get(serverLevel);
+                RoleAssignmentData roleData = RoleAssignmentData.get(serverLevel);
+                AdvisorStateData advisorStateData = AdvisorStateData.get(serverLevel);
+                for (AssistantRoleRecord record : roleData.getAssignments()) {
+                    if ("Advisor".equalsIgnoreCase(record.roleType())
+                            && advisorStateData.getState(record.playerUUID()) == AdvisorState.COLONY_NO_CITIZEN) {
+                        advisorStateData.setState(record.playerUUID(), AdvisorState.COLONY_WITH_CITIZEN);
+                        advisorStateData.setAssignedCitizenId(record.playerUUID(), record.citizenId());
+                        LOGGER.info("[DragonTweaks] Healed AdvisorState for player={} citizenId={} → COLONY_WITH_CITIZEN",
+                            record.playerUUID(), record.citizenId());
+                    }
+                }
             }
         });
         NeoForge.EVENT_BUS.addListener(CitizenInteractDetector::onEntityInteract);
-        NeoForge.EVENT_BUS.addListener(ChatInterceptor::onServerChat);
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST, ChatInterceptor::onServerChat);
         NeoForge.EVENT_BUS.addListener(ObservationTicker::onServerTick);
         NeoForge.EVENT_BUS.addListener(AdvisorDiagnosticLoop::onServerTick);
         NeoForge.EVENT_BUS.addListener(AdvisorHotbarWatcher::onPlayerTick);
@@ -95,6 +107,7 @@ public class DragonTweaks {
                 ColonyDiagnosticCache.invalidate(colonyId);
                 AdvisorDiagnosticLoop.markDirty(colonyId);
                 if (!(e.getColony().getWorld() instanceof ServerLevel level)) return;
+                NicknameData.get(level.getServer().overworld()).removeNickname(colonyId, e.getCitizen().getId());
                 String citizenName = e.getCitizen().getName();
                 String prompt = citizenName + " has died. React with grief or shock in character.";
                 ObservationTicker.fireColonyEventObservation(level.getServer(), level, prompt);
@@ -127,6 +140,17 @@ public class DragonTweaks {
                 int colonyId = e.getColony().getID();
                 ColonyDiagnosticCache.invalidate(colonyId);
                 AdvisorDiagnosticLoop.markDirty(colonyId);
+                if (LITE_MODE) return;
+                UUID ownerUUID = e.getColony().getPermissions().getOwner();
+                if (!(e.getColony().getWorld() instanceof ServerLevel serverLevel)) return;
+                AdvisorStateData stateData = AdvisorStateData.get(serverLevel.getServer().getLevel(Level.OVERWORLD));
+                if (stateData.getState(ownerUUID) != AdvisorState.COLONY_NO_CITIZEN) return;
+                if (!citizenArrivalNotifiedPlayers.add(ownerUUID)) return;
+                ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(ownerUUID);
+                if (player != null) {
+                    player.sendSystemMessage(Component.literal(
+                        "New colonists have arrived, Dev. Consider assigning one of them to serve as your Advisor."));
+                }
             });
 
             IMinecoloniesAPI.getInstance().getEventBus().subscribe(ColonyCreatedModEvent.class, e -> {
@@ -140,7 +164,7 @@ public class DragonTweaks {
                     ServerPlayer player = serverLevel.getServer().getPlayerList().getPlayer(playerUUID);
                     if (player != null) {
                         player.sendSystemMessage(Component.literal(
-                            "A colony has been established. I'll be staying close from now on. If you need me, say 'Advisor' followed by your question \u2014 but only while you're within the colony bounds."));
+                            "A colony has been established. I'll be staying close from now on. If you need me, say 'Advisor' followed by your question."));
                     }
                 }
             });

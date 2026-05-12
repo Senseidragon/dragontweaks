@@ -46,6 +46,12 @@ public record RoleSelectionPacket(int citizenId, String selectedRole) implements
             }
             roleData.assign(packet.citizenId(), packet.selectedRole(), player.getUUID());
             player.sendSystemMessage(Component.literal("Role assigned: " + packet.selectedRole() + "."));
+            if (packet.selectedRole().equalsIgnoreCase("Advisor")) {
+                AdvisorStateData advisorData = AdvisorStateData.get(overworld);
+                advisorData.setState(player.getUUID(), AdvisorState.COLONY_WITH_CITIZEN);
+                advisorData.setAssignedCitizenId(player.getUUID(), packet.citizenId());
+                advisorData.setDirty();
+            }
         });
     }
 }

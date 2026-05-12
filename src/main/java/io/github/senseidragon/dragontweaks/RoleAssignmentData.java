@@ -49,6 +49,10 @@ public class RoleAssignmentData extends SavedData {
         return assignments.containsKey(citizenId);
     }
 
+    public Iterable<AssistantRoleRecord> getAssignments() {
+        return assignments.values();
+    }
+
     public int getAssignedCount(UUID playerUUID) {
         int count = 0;
         for (AssistantRoleRecord record : assignments.values()) {

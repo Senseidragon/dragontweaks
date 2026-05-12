@@ -23,8 +23,10 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @EventBusSubscriber(modid = DragonTweaks.MODID)
 public class AssistantCommand {
@@ -83,6 +85,15 @@ public class AssistantCommand {
                 .then(Commands.literal("revoke")
                     .then(Commands.argument("citizenName", StringArgumentType.greedyString())
                         .executes(ctx -> revokeByName(ctx, StringArgumentType.getString(ctx, "citizenName")))
+                    )
+                )
+                .then(Commands.literal("nickname")
+                    .then(Commands.argument("partialName", StringArgumentType.string())
+                        .then(Commands.argument("nickname", StringArgumentType.greedyString())
+                            .executes(ctx -> assignNickname(ctx,
+                                StringArgumentType.getString(ctx, "partialName"),
+                                StringArgumentType.getString(ctx, "nickname")))
+                        )
                     )
                 )
         );
@@ -344,6 +355,55 @@ public class AssistantCommand {
             }
         }
 
+        return 1;
+    }
+
+    private static int assignNickname(CommandContext<CommandSourceStack> ctx, String partial, String nickname) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        if (!ModList.get().isLoaded("minecolonies")) {
+            ctx.getSource().sendFailure(Component.literal("MineColonies is not loaded."));
+            return 0;
+        }
+        ServerLevel overworld = player.getServer().getLevel(Level.OVERWORLD);
+        if (overworld == null) return 0;
+
+        IColony colony = null;
+        for (ServerLevel level : player.getServer().getAllLevels()) {
+            for (IColony c : IColonyManager.getInstance().getColonies(level)) {
+                if (player.getUUID().equals(c.getPermissions().getOwner())) {
+                    colony = c;
+                    break;
+                }
+            }
+            if (colony != null) break;
+        }
+        if (colony == null) {
+            ctx.getSource().sendFailure(Component.literal("You don't have a colony."));
+            return 0;
+        }
+
+        String lowerPartial = partial.toLowerCase();
+        List<ICitizenData> matches = new ArrayList<>();
+        for (ICitizenData citizen : colony.getCitizenManager().getCitizens()) {
+            if (citizen.getName().toLowerCase().contains(lowerPartial)) {
+                matches.add(citizen);
+            }
+        }
+
+        if (matches.isEmpty()) {
+            ctx.getSource().sendFailure(Component.literal("No citizen found matching '" + partial + "'."));
+            return 0;
+        }
+        if (matches.size() > 1) {
+            String names = matches.stream().map(ICitizenData::getName).collect(Collectors.joining(", "));
+            ctx.getSource().sendFailure(Component.literal("Ambiguous — did you mean: " + names + "?"));
+            return 0;
+        }
+
+        ICitizenData citizen = matches.get(0);
+        NicknameData.get(overworld).setNickname(colony.getID(), citizen.getId(), nickname);
+        final String citizenName = citizen.getName();
+        ctx.getSource().sendSuccess(() -> Component.literal("Nickname '" + nickname + "' assigned to " + citizenName + "."), false);
         return 1;
     }
 

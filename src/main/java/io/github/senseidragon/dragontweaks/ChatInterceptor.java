@@ -25,8 +25,9 @@ public class ChatInterceptor {
         List<AssistantEntity> candidates = serverLevel.getEntitiesOfClass(AssistantEntity.class, searchBox);
 
         BookAdvisorEntity bookAdvisor = null;
+        AdvisorState earlyState = null;
         if (!DragonTweaks.LITE_MODE) {
-            AdvisorState earlyState = AdvisorStateData.get(serverLevel.getServer().overworld()).getState(player.getUUID());
+            earlyState = AdvisorStateData.get(serverLevel.getServer().overworld()).getState(player.getUUID());
             DragonTweaks.LOGGER.debug("[ChatInterceptor] player={} advisorState={}", player.getGameProfile().getName(), earlyState);
             if (earlyState == AdvisorState.PRE_COLONY || earlyState == AdvisorState.DORMANT) {
                 AABB bookBox = AABB.ofSize(player.position(), 64, 64, 64);
@@ -39,7 +40,7 @@ public class ChatInterceptor {
             }
         }
 
-        if (candidates.isEmpty() && bookAdvisor == null) return;
+        if (candidates.isEmpty() && bookAdvisor == null && earlyState != AdvisorState.COLONY_NO_CITIZEN && earlyState != AdvisorState.COLONY_WITH_CITIZEN) return;
 
         String messageLower = event.getRawText().toLowerCase();
         String[] messageWords = messageLower.split("\\s+");
@@ -124,11 +125,82 @@ public class ChatInterceptor {
             }
         }
 
+        // COLONY_NO_CITIZEN BookAdvisorEntity search
+        BookAdvisorEntity colonyNoBookAdvisor = null;
+        IColony colonyNoColony = null;
+        if (!DragonTweaks.LITE_MODE && advisorState == AdvisorState.COLONY_NO_CITIZEN
+                && messageLower.startsWith("advisor")
+                && ModList.get().isLoaded("minecolonies")) {
+            for (IColony c : IColonyManager.getInstance().getColonies(serverLevel)) {
+                if (player.getUUID().equals(c.getPermissions().getOwner())) {
+                    colonyNoColony = c;
+                    break;
+                }
+            }
+            if (colonyNoColony != null) {
+                for (var e : serverLevel.getAllEntities()) {
+                    if (e instanceof BookAdvisorEntity ba && player.getUUID().equals(ba.getOwnerUUID())) {
+                        colonyNoBookAdvisor = ba;
+                        break;
+                    }
+                }
+            }
+        }
+
+        DragonTweaks.LOGGER.info("[ChatInterceptor] COLONY_NO_CITIZEN: colonyNoColony={}, colonyNoBookAdvisor={}",
+            colonyNoColony != null ? "found" : "null",
+            colonyNoBookAdvisor != null ? "found" : "null");
+
+        // COLONY_WITH_CITIZEN: BookAdvisorEntity search
+        BookAdvisorEntity colonyWithBookAdvisor = null;
+        IColony colonyWithColony = null;
+        String citizenNameForAdvisor = null;
+        String citizenFirstName = null;
+        boolean cwAdvisorKeyword = false;
+        if (!DragonTweaks.LITE_MODE && advisorState == AdvisorState.COLONY_WITH_CITIZEN
+                && ModList.get().isLoaded("minecolonies")) {
+            AdvisorStateData cwStateData = AdvisorStateData.get(player.getServer().overworld());
+            Integer assignedCitizenId = cwStateData.getAssignedCitizenId(player.getUUID());
+            for (IColony c : IColonyManager.getInstance().getColonies(serverLevel)) {
+                if (player.getUUID().equals(c.getPermissions().getOwner())) {
+                    colonyWithColony = c;
+                    break;
+                }
+            }
+            if (colonyWithColony != null && assignedCitizenId != null) {
+                var citizen = colonyWithColony.getCitizenManager().getCivilian(assignedCitizenId);
+                if (citizen != null) {
+                    citizenNameForAdvisor = NicknameData.resolve(player.getServer().overworld(), colonyWithColony.getID(), assignedCitizenId, citizen.getName());
+                    citizenFirstName = citizenNameForAdvisor.split("\\s+")[0];
+                }
+            }
+            boolean nameTriggered = false;
+            if (citizenFirstName != null) {
+                String[] cwWords = messageLower.split("\\s+");
+                String firstName = citizenFirstName.toLowerCase();
+                for (int i = 0; i < Math.min(3, cwWords.length); i++) {
+                    String stripped = cwWords[i].replaceAll("[^a-z0-9]", "");
+                    if (stripped.equals(firstName)) { nameTriggered = true; break; }
+                }
+            }
+            cwAdvisorKeyword = messageLower.startsWith("advisor");
+            DragonTweaks.LOGGER.info("[ChatInterceptor] COLONY_WITH_CITIZEN: assignedCitizenId={}, citizenName={}, citizenFirstName={}, nameTriggered={}, cwAdvisorKeyword={}",
+                assignedCitizenId, citizenNameForAdvisor, citizenFirstName, nameTriggered, cwAdvisorKeyword);
+            if ((nameTriggered || cwAdvisorKeyword) && colonyWithColony != null) {
+                for (var e : serverLevel.getAllEntities()) {
+                    if (e instanceof BookAdvisorEntity ba && player.getUUID().equals(ba.getOwnerUUID())) {
+                        colonyWithBookAdvisor = ba;
+                        break;
+                    }
+                }
+            }
+        }
+
         // Combined LLM targets
         List<AssistantEntity> allTargets = new ArrayList<>(advisorTargets);
         allTargets.addAll(nonAdvisorTargets);
 
-        if (allTargets.isEmpty() && bookAdvisor == null) return;
+        if (allTargets.isEmpty() && bookAdvisor == null && colonyNoBookAdvisor == null && colonyWithBookAdvisor == null) return;
 
         // Keyword detection — runs before LLM query; state change is immediate
         boolean isFollowIntent = containsAny(messageLower, "follow", "come with", "walk with me", "come along", "come here", "follow me");
@@ -204,6 +276,90 @@ public class ChatInterceptor {
             DragonTweaks.LOGGER.debug("[DragonTweaks] PRE_COLONY prompt for {} at {}:\nTERRAIN: {}\nPROMPT: {}",
                 playerName, player.blockPosition(), terrainLabels, scopedPrompt);
             LLMClient.query(server, player, bookName, rawMessage, bookAdvisor.getUUID(), scopedPrompt);
+        }
+
+        // COLONY_NO_CITIZEN: BookAdvisorEntity response
+        if (colonyNoBookAdvisor != null && colonyNoColony != null) {
+            String terrainLabels = TerrainScanner.scan(serverLevel, player.blockPosition());
+            int thLevel = colonyNoColony.getServerBuildingManager().hasTownHall()
+                ? colonyNoColony.getServerBuildingManager().getTownHall().getBuildingLevel()
+                : 0;
+            StringBuilder colonySummary = new StringBuilder();
+            colonySummary.append("Town Hall level: ").append(thLevel).append("\n");
+            colonySummary.append("Buildings:\n");
+            for (var b : colonyNoColony.getServerBuildingManager().getBuildings().values()) {
+                colonySummary.append("  - ")
+                    .append(b.getBuildingType().getRegistryName().getPath())
+                    .append(" (level ").append(b.getBuildingLevel()).append(")")
+                    .append(" at ").append(b.getPosition())
+                    .append("\n");
+            }
+            int population = colonyNoColony.getCitizenManager().getCurrentCitizenCount();
+            int maxPopulation = colonyNoColony.getCitizenManager().getMaxCitizens();
+            colonySummary.append("Population: ").append(population).append(" / ").append(maxPopulation);
+            String strippedMessage = rawMessage.replaceFirst("(?i)^advisor\\s*", "");
+            String playerName = player.getGameProfile().getName();
+            String colonyNoPrompt =
+                "You are Advisor, a colony advisor. You have full knowledge of the colony structure.\n" +
+                "You are at depth Y=" + player.getBlockY() + " in a " + biomeName + " biome. Time of day: " + timeOfDay + ". Weather: " + weather + ".\n" +
+                "Nearby terrain: " + terrainLabels + ".\n" +
+                "Colony state:\n" + colonySummary + "\n" +
+                "The person speaking to you is " + playerName + ".\n" +
+                "Respond in 1 short sentence under 100 characters. Never break character. Never say you are an AI.";
+            DragonTweaks.LOGGER.info("[ChatInterceptor] COLONY_NO_CITIZEN LLM fire: colonyNoColony={} colonyNoBookAdvisor={} advisorState={}", colonyNoColony != null ? "present" : "null", colonyNoBookAdvisor != null ? "present" : "null", advisorState);
+            LLMClient.query(server, player, Component.literal("Advisor"), strippedMessage, colonyNoBookAdvisor.getUUID(), colonyNoPrompt);
+        }
+
+        // COLONY_WITH_CITIZEN: BookAdvisorEntity response
+        if (colonyWithBookAdvisor != null && colonyWithColony != null) {
+            String cwTerrainLabels = TerrainScanner.scan(serverLevel, player.blockPosition());
+            int cwThLevel = colonyWithColony.getServerBuildingManager().hasTownHall()
+                ? colonyWithColony.getServerBuildingManager().getTownHall().getBuildingLevel()
+                : 0;
+            StringBuilder cwColonySummary = new StringBuilder();
+            cwColonySummary.append("Town Hall level: ").append(cwThLevel).append("\n");
+            cwColonySummary.append("Buildings:\n");
+            for (var b : colonyWithColony.getServerBuildingManager().getBuildings().values()) {
+                cwColonySummary.append("  - ")
+                    .append(b.getBuildingType().getRegistryName().getPath())
+                    .append(" (level ").append(b.getBuildingLevel()).append(")")
+                    .append(" at ").append(b.getPosition())
+                    .append("\n");
+            }
+            int cwPopulation = colonyWithColony.getCitizenManager().getCurrentCitizenCount();
+            int cwMaxPopulation = colonyWithColony.getCitizenManager().getMaxCitizens();
+            cwColonySummary.append("Population: ").append(cwPopulation).append(" / ").append(cwMaxPopulation).append("\n");
+            cwColonySummary.append("Citizens:\n");
+            for (var citizen : colonyWithColony.getCitizenManager().getCitizens()) {
+                double happiness = citizen.getCitizenHappinessHandler().getHappiness(colonyWithColony, citizen);
+                cwColonySummary.append("  - ").append(NicknameData.resolve(player.getServer().overworld(), colonyWithColony.getID(), citizen.getId(), citizen.getName()))
+                    .append(" (happiness: ").append(String.format("%.2f", happiness)).append(")\n");
+            }
+            String advisorName = citizenNameForAdvisor != null ? citizenNameForAdvisor : "Advisor";
+            String cwStrippedMessage = cwAdvisorKeyword
+                ? rawMessage.replaceFirst("(?i)^advisor\\s*", "")
+                : citizenFirstName != null
+                    ? rawMessage.replaceFirst("(?i)^" + java.util.regex.Pattern.quote(citizenFirstName) + "\\s*", "")
+                    : rawMessage;
+            String cwPlayerName = player.getGameProfile().getName();
+            String colonyWithPrompt =
+                "You are " + advisorName + ", the colony Advisor. You have full knowledge of this colony's current state.\n" +
+                RolePersona.getPersonaBlock("advisor") + "\n" +
+                "Colony state:\n" +
+                "- Town Hall level: " + cwThLevel + "\n" +
+                "- Buildings: " + cwColonySummary + "\n" +
+                "- Population: " + cwPopulation + "/" + cwMaxPopulation + "\n" +
+                "The person speaking to you is " + cwPlayerName + ".\n" +
+                "RULES:\n" +
+                "- Base every recommendation strictly on the colony data above.\n" +
+                "- A new colony with no Builder's Hut must be told to build one first — it is required before anything else can be constructed.\n" +
+                "- Never give generic advice. Every recommendation must reference specific buildings, citizens, or data from the colony state above.\n" +
+                "- Speak as " + advisorName + ". Never break character.\n" +
+                "Respond in 1 short sentence under 100 characters.";
+            LLMClient.query(server, player, Component.literal(advisorName), cwStrippedMessage, colonyWithBookAdvisor.getUUID(), colonyWithPrompt);
+            if (cwAdvisorKeyword && citizenNameForAdvisor != null) {
+                player.sendSystemMessage(Component.literal("[" + advisorName + "]: You know, you can just call me " + advisorName + "."));
+            }
         }
 
         // Advisor fallback reminder in COLONY_WITH_CITIZEN when "advisor" matched instead of citizen name
