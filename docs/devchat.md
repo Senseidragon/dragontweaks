@@ -1,7 +1,7 @@
 # DragonTweaks — Current State Document
 *Replaces the original devchat.md as the active reference for Claude Code.*
 *Full session history archived in devchat_archive.md — do not delete.*
-*Last updated: 2026-05-10 (session 20)*
+*Last updated: 2026-05-12 (session 22)*
 
 ---
 
@@ -60,16 +60,17 @@ All source files are in `src/main/java/io/github/senseidragon/dragontweaks/`.
 
 | File | Status | Notes |
 |---|---|---|
-| `AssistantCommand.java` | ✅ Complete | `/assistant` command handler — stop command now calls setHomePosition() to anchor wander radius at current position (commit 1335c95) |
+| `AssistantCommand.java` | ✅ Complete | `/assistant` command handler — stop command now calls setHomePosition() to anchor wander radius at current position (commit 1335c95); `/assistant revoke <citizenName>` subcommand: searches all levels for an assigned citizen by name, revokes role, handles advisor state transition to COLONY_NO_CITIZEN + BookAdvisorEntity swap if role was advisor; `/assistant nickname <partial> <nickname>` subcommand added 2026-05-12 |
 | `AssistantEntity.java` | ✅ Complete | NPC entity, follow/stop, proximity, role, NBT persistence; idle wander (WaterAvoidingRandomStrollGoal), LookAtPlayerGoal, and per-player greeting system added 2026-05-05; wander radius constraint via restrictTo() and MoveTowardsRestrictionGoal added 2026-05-05 (commit 1335c95) |
 | `AssistantRenderer.java` | ✅ Complete | Placeholder zombie renderer |
 | `AssistantRoleRecord.java` | ✅ Complete | Data record: citizenId (int), roleType, assignmentTimestamp, playerUUID, shadowEntityUUID — citizenId added 2026-04-30; shadowEntityUUID is intentional, do not remove |
-| `ChatInterceptor.java` | ✅ Complete | Intercepts player chat, routes to LLM, multi-NPC addressing; PRE_COLONY BookAdvisorEntity prompt now includes block scan terrain labels (32×8×32 radius, step 2) added 2026-05-10; scanTerrainLabels extracted to TerrainScanner 2026-05-10 |
-| `TerrainScanner.java` | ✅ Complete | Shared terrain scan utility. `public static String scan(ServerLevel, BlockPos)`. Extracted from ChatInterceptor. Used by both ChatInterceptor and PreColonyScoutTicker. Added 2026-05-10. |
-| `PreColonyScoutTicker.java` | ✅ Complete | Proactive PRE_COLONY scouting observations. 1200-tick interval. Guards: PRE_COLONY state, not flying, moved ≥64 blocks in X or Z, BookAdvisorEntity within 64 blocks. Calls TerrainScanner.scan(), builds custom system prompt, fires async LLM via LLMClient.query(). 1-in-7 dry humor directive. Updates lastObservedPos per player. Added 2026-05-10. |
+| `ChatInterceptor.java` | ✅ Complete | Intercepts player chat, routes to LLM, multi-NPC addressing; PRE_COLONY BookAdvisorEntity prompt now includes block scan terrain labels (32×8×32 radius, step 2) added 2026-05-10; scanTerrainLabels extracted to TerrainScanner 2026-05-10; COLONY_NO_CITIZEN BookAdvisorEntity routing block added 2026-05-10 (session 21); citizen name lookups now resolve nickname via NicknameData.resolve() 2026-05-12 |
+| `TerrainScanner.java` | ✅ Complete | Shared terrain scan utility. `public static String scan(ServerLevel, BlockPos)`. Extracted from ChatInterceptor. Used by both ChatInterceptor and PreColonyScoutTicker. Added 2026-05-10. Village detection updated 2026-05-12: replaced block-scan heuristic (BELL/HAY_BLOCK/etc.) with `ServerLevel.findNearestMapStructure(StructureTags.VILLAGE, center, 19, false)` (~300-block radius); label now includes compass direction and approximate distance e.g. "village to the northeast (~84 blocks)" via private `compassDir(dx, dz)` helper (8-point). Structures label suppressed when village found. |
+| `PreColonyScoutTicker.java` | ✅ Complete | Proactive PRE_COLONY scouting observations. 1200-tick interval. Guards: PRE_COLONY state, not flying, moved ≥64 blocks in X or Z, BookAdvisorEntity within 64 blocks. Calls TerrainScanner.scan(), builds custom system prompt, fires async LLM via LLMClient.query(). 1-in-7 dry humor directive. Updates lastObservedPos per player. Added 2026-05-10. Village proximity check added 2026-05-12: independent `findNearestMapStructure` call (150-block radius), distance rounded to nearest 50 blocks, 8-point compass direction — injects iron golem hostility and pillager raid escalation warning into LLM context. System prompt updated to include "village proximity and colony placement risk". `lastObservedPos.put()` moved earlier (before LLM fire) to prevent double-fire on slow responses. |
 | `Config.java` | ✅ Complete | NeoForge ModConfigSpec. See Config section below. ADVISOR_COMMUTE_THRESHOLD, ADVISOR_HAPPINESS_THRESHOLD_RED, ADVISOR_HAPPINESS_THRESHOLD_YELLOW added 2026-05-07. |
 | `ConversationMemory.java` | ✅ Complete | Per-NPC conversation history |
-| `DragonTweaks.java` | ✅ Complete | Main mod class, event bus registration — LevelEvent.Load handler added 2026-05-01; MineColonies CitizenDiedModEvent and BuildingConstructionModEvent handlers added 2026-05-05, guarded by ModList.isLoaded check; CitizenInteractDetector registered 2026-05-06; ColonyCreatedModEvent, ColonyDeletedModEvent, advisor citizen-lost logic added 2026-05-08; registerServerPackets() added 2026-05-08 to register RoleSelectionPacket playToServer handler |
+| `DragonTweaks.java` | ✅ Complete | Main mod class, event bus registration — LevelEvent.Load handler added 2026-05-01; MineColonies CitizenDiedModEvent and BuildingConstructionModEvent handlers added 2026-05-05, guarded by ModList.isLoaded check; CitizenInteractDetector registered 2026-05-06; ColonyCreatedModEvent, ColonyDeletedModEvent, advisor citizen-lost logic added 2026-05-08; registerServerPackets() added 2026-05-08 to register RoleSelectionPacket playToServer handler; CitizenDiedModEvent now calls NicknameData.removeNickname() 2026-05-12 |
+| `NicknameData.java` | ✅ Complete | SavedData on overworld, key "dragontweaks_nicknames". Map<String,String> keyed by "colonyId:citizenId". setNickname/getNickname/removeNickname/resolve(). Added 2026-05-12 |
 | `DragonTweaksClient.java` | ✅ Complete | Client-only setup. Packet handler registration moved here (session 9): `registerPackets()` added to constructor, registers both panel packet handlers via `ClientPanelHandler`; RoleAssignmentPayload handler added inline (session 15). |
 | `DragonTweaksClientEvents.java` | ✅ Complete | Client event bus subscriber |
 | `EnvLoader.java` | ✅ Complete | Reads `.env` file for API key |
@@ -78,10 +79,10 @@ All source files are in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `ModEntities.java` | ✅ Complete | Entity type registration — `BOOK_ADVISOR` DeferredHolder added 2026-05-08; no attribute registration (Entity subclass, not Mob) |
 | `ObservationTicker.java` | ✅ Complete | Proactive NPC observations on server tick — 5 bugs fixed 2026-04-30; greeting trigger loop, raid state-flip poll (IRaiderManager.isRaided()), and fireColonyEventObservation helper added 2026-05-05 |
 | `RolePersona.java` | ✅ Complete | Role keyword → persona block mapping |
-| `RoleAssignmentData.java` | ✅ Complete | SavedData for role assignments — file exists and is correct; updated 2026-04-30 to match AssistantRoleRecord signature |
+| `RoleAssignmentData.java` | ✅ Complete | SavedData for role assignments — file exists and is correct; updated 2026-04-30 to match AssistantRoleRecord signature; `getAssignments()` returning `Iterable<AssistantRoleRecord>` added 2026-05-12 |
 | `RoleAssignmentScreen.java` | ✅ Complete | Client-side role assignment UI. @OnlyIn(Dist.CLIENT). Extends Screen. Scrollable role list, slot counter, Assign/Cancel buttons. Added 2026-05-08. |
 | `RoleAssignmentPayload.java` | ✅ Complete | Server→client packet. Carries citizenName, citizenId, slotsUsed, slotsMax, availableRoles. AVAILABLE_ROLES constant hardcoded to ["Ranch Hand", "Scout", "Advisor", "Planner"]. Added 2026-05-08. |
-| `RoleSelectionPacket.java` | ✅ Complete | Client→server packet. Carries citizenId, selectedRole. handleOnServer: LITE_MODE guard, isAssigned re-verify, calls RoleAssignmentData.assign(), confirms to player. Added 2026-05-08. |
+| `RoleSelectionPacket.java` | ✅ Complete | Client→server packet. Carries citizenId, selectedRole. handleOnServer: LITE_MODE guard, isAssigned re-verify, calls RoleAssignmentData.assign(), confirms to player. Added 2026-05-08. Updated 2026-05-12: when selectedRole is "Advisor", transitions AdvisorStateData to COLONY_WITH_CITIZEN and sets assignedCitizenId — this is the wiring that activates full advisor capability on role assignment. |
 | `CitizenInteractDetector.java` | ✅ Complete | PlayerInteractEvent.EntityInteract handler — citizen check, null-safe ICitizenData retrieval, isAssigned guard, dynamic TH-level slot cap, event cancel + debug log; sends RoleAssignmentPayload to player via PacketDistributor.sendToPlayer(). Added 2026-05-06; TODO stub replaced 2026-05-08. |
 | `PlannerDependencyRegistry.java` | ✅ Complete | Singleton. Loads `planner_dependencies.json` from classpath at commonSetup. Resolves dependency graph DFS into pre-computed per-building chains. Public: `getChain(String)`, `findMatches(String)` returning `MatchResult` with exact and substring suggestion lists. Added 2026-05-07. Updated session 9: parses `auto_satisfied` field from JSON into `autoSatisfiedIds`; exposes `isAutoSatisfied(String)`. |
 | `OpenAdvisorPanelPacket.java` | ✅ Complete | Network packet (server→client). Carries `AdvisorPanelPayload`. `handleOnClient` removed session 9 — handler lives in `ClientPanelHandler`. Serialization/deserialization unchanged. Added 2026-05-07. |
@@ -89,8 +90,9 @@ All source files are in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `ClientPanelHandler.java` | ✅ Complete | `@OnlyIn(Dist.CLIENT)`. Two static handler methods: `handleAdvisorPanel` and `handlePlannerPanel`. Each calls `Minecraft.getInstance().setScreen()` via `ctx.enqueueWork()`. Registered in `DragonTweaksClient`. Added session 9. |
 | `AssistantPanelCommand.java` | ✅ Complete | Handles `/assistant advisor` and `/assistant planner` subcommands. Sends `OpenAdvisorPanelPacket` / `OpenPlannerPanelPacket` to the executing player. Added 2026-05-07. |
 | `ColonyDiagnosticCache.java` | ✅ Complete | Per-colony cache wrapping ColonyDiagnosticReport. TTL 30s. Static `getOrGenerate(IColony)` + `invalidate(int colonyId)`. Added 2026-05-07. |
-| `ColonyDiagnosticReportGenerator.java` | ✅ Complete | Generates `ColonyDiagnosticReport` from live colony data. Updated session 9: `housingCap` now counts beds from built Residence (×2) and Tavern (×4) buildings via `countBedCapacity()`; replaces old `getMaxCitizens()` proxy. Translation key substrings have TODO pending in-game verification. |
-| `BookAdvisorEntity.java` | ✅ Complete | Lightweight floating entity. Extends `Entity` (not PathfinderMob). No AI goals. No combat. State-aware tick: PRE_COLONY follows player with yaw-relative offset; COLONY_NO_CITIZEN and COLONY_WITH_CITIZEN follow within colony bounds, hold position within ADVISOR_BOUNDARY_DETECTION_RANGE of entity, snap to Town Hall if beyond that range. Colony looked up via IColonyManager.getInstance().getIColony(). MineColonies guard via ModList.isLoaded(). Glow via `setGlowingTag(true)`. NBT persists ownerUUID only. No renderer — placeholder. Updated 2026-05-08. |
+| `ColonyDiagnosticReportGenerator.java` | ✅ Complete | Single public method: `generate(IColony)` → `ColonyDiagnosticReport`. Four private helpers: `buildCitizenRecords()` — iterates all citizens, resolves name/job/work pos/home pos/commute distance (XZ Euclidean)/happiness factors (10 canonical via HappinessConstants) with red+yellow flags; `buildBuildingRecords()` — type (translation key), level, built, pending, first assigned worker name; `collectEnvironmentalFlags()` — DAYLIGHT_CYCLE_DISABLED (GameRules), RAID_ACTIVE (isRaided()), THUNDERSTORM; `countBedCapacity()` — sums beds from built Residence (×2) and Tavern (×4) by translation key substring match (TODO: verify substrings against 1.21.1 sources); `determineRootCause()` — maps worstFactor + home/work buildings + commute + redFactors list to `RootCause` enum (food always returns FOOD_SUPPLY_CHAIN pending Cook/Restaurant key verification TODO). **Systemic pattern detection IS here**: Phase 3 in `generate()` — NEWLY_FOUNDED_ALL_RED (colonyDay < 3 AND all citizens have ≥1 red factor), ALL_CITIZENS_RED (all have ≥1 red), HOUSING_SLEEP_COMMUTE_CLUSTER (≥2 citizens with commute > threshold AND housing red AND sleep red); first match wins. **Per-citizen root cause analysis IS here**: Phase 4 in `generate()` — picks lowest-happiness citizen (tiebreak by name), computes commuteDistance, finds worstFactor and redFactors list, calls determineRootCause(). Phase 4 is skipped entirely when a systemic pattern is detected. All diagnostic output fields (targetCitizen, worstFactor, redFactors, rootCause, commuteDistance, commuteFlagged, systemicDetected, systemicPattern) are populated here and stored directly on `ColonyDiagnosticReport`. |
+| `BookAdvisorEntity.java` | ✅ Complete | Lightweight floating entity. Extends `Entity` (not PathfinderMob). No AI goals. No combat. State-aware tick: PRE_COLONY follows player with yaw-relative offset; COLONY_NO_CITIZEN and COLONY_WITH_CITIZEN follow within colony bounds, hold position within ADVISOR_BOUNDARY_DETECTION_RANGE of entity, snap to Town Hall if beyond that range. Colony looked up via IColonyManager.getInstance().getIColony(). MineColonies guard via ModList.isLoaded(). Glow via `setGlowingTag(true)`. NBT persists ownerUUID only. Rendered by BookAdvisorRenderer. Updated 2026-05-08. |
+| `BookAdvisorRenderer.java` | ✅ Complete | `@OnlyIn(Dist.CLIENT)`. Extends `EntityRenderer<BookAdvisorEntity>`. Reads `AdvisorState` from overworld `AdvisorStateData` client-side via `mc.getSingleplayerServer()`. Renders `Items.WRITABLE_BOOK` when state is `COLONY_WITH_CITIZEN`, `Items.BOOK` for all other states — this is the book-to-book-and-quill visual swap. Y-rotation animation: one full rotation per 80 ticks. Verified working in-game 2026-05-12. |
 | `AdvisorState.java` | ✅ Complete | Enum: DORMANT, PRE_COLONY, COLONY_NO_CITIZEN, COLONY_WITH_CITIZEN. Added 2026-05-08. |
 | `AdvisorStateData.java` | ✅ Complete | SavedData. Per-player map keyed by UUID. Fields: advisorState, buildToolTriggerFired, assignedCitizenId (nullable), advisorEntityUUID (nullable). Attached to overworld, key "dragontweaks_advisor_state". Added 2026-05-08. |
 | `AdvisorHotbarWatcher.java` | ✅ Complete | `PlayerTickEvent.Post` listener on NeoForge.EVENT_BUS. Server-side only. DORMANT state only — returns immediately in any other state. Scans hotbar slots 0–8 for `structurize:sceptergold` via `BuiltInRegistries.ITEM.getKey()`. On first detection: sets buildToolTriggerFired, transitions state to PRE_COLONY, spawns one BookAdvisorEntity in player's current level, stores entity UUID in AdvisorStateData. AdvisorStateData read/written from overworld SavedData. Added 2026-05-08. |
@@ -832,6 +834,56 @@ All other events are deferred. No functional response to any event — commentar
 | `FLAVOR_NPC_GREETING_COOLDOWN_TICKS` | int | 12000 | Per-NPC, per-player cooldown |
 
 Both values must be in `Config.java`. Never hardcode.
+
+---
+
+## Session Notes — 2026-05-12 (session 22) — Nickname system, village proximity warnings, advisor activation wiring
+
+### NicknameData.java — new SavedData
+
+Created `NicknameData.java`. NeoForge SavedData attached to overworld at key `"dragontweaks_nicknames"`. Internal store: `Map<String, String>` keyed by `"colonyId:citizenId"` strings. Public API: `setNickname(int colonyId, int citizenId, String nickname)`, `getNickname(int colonyId, int citizenId)` (nullable), `removeNickname(int colonyId, int citizenId)`, `resolve(int colonyId, int citizenId, String fallback)` — returns nickname if set, fallback otherwise. Static `get(ServerLevel)` factory. Full NBT serialization.
+
+### AssistantCommand.java — /assistant nickname subcommand
+
+Added `/assistant nickname <partialName> <nickname>` (greedyString for nickname to allow spaces). Finds player's colony across all server levels. Partial case-insensitive name match against `colony.getCitizenManager().getCitizens()`. Multiple matches: lists them and asks player to be more specific. Single match: calls `NicknameData.setNickname()` and confirms. No match: informs player. Guards: MineColonies loaded, player has colony.
+
+### ChatInterceptor.java — nickname resolution
+
+Citizen name lookups in COLONY_WITH_CITIZEN trigger detection now resolve via `NicknameData.resolve(colonyId, citizenId, citizenName)`. Players can address their advisor by nickname instead of MineColonies-assigned name.
+
+### DragonTweaks.java — nickname cleanup on death
+
+`CitizenDiedModEvent` handler now calls `NicknameData.removeNickname(colonyId, citizenId)` to clean up any stored nickname when a citizen dies.
+
+### TerrainScanner.java — village detection overhaul
+
+Replaced block-scan village heuristic (BELL, HAY_BLOCK, etc.) with `ServerLevel.findNearestMapStructure(StructureTags.VILLAGE, center, 19, false)` (~300-block scan radius). Label now includes compass direction and approximate distance: e.g. `"village to the northeast (~84 blocks)"`. Compass direction via private `compassDir(dx, dz)` helper (8-point). Structures label suppressed when village is found — the two are mutually exclusive in output.
+
+### PreColonyScoutTicker.java — village proximity warning
+
+Added independent village proximity check using `findNearestMapStructure` at 150-block radius (separate from TerrainScanner's scan). Distance rounded to nearest 50 blocks. 8-point compass direction. When a village is detected, injects a warning into the LLM context advising the player about iron golem hostility and pillager raid escalation risk from placing a colony near a village. System prompt updated to include "village proximity and colony placement risk" in the Speak ONLY about line. `lastObservedPos.put()` moved to before the LLM call to prevent double-fire if LLM response is slow.
+
+### RoleAssignmentData.java — getAssignments()
+
+Added `getAssignments()` returning `Iterable<AssistantRoleRecord>` — exposes all current role assignments for iteration.
+
+### RoleSelectionPacket.java — advisor state activation
+
+`handleOnServer()` now includes an Advisor-specific block: when `selectedRole` equals `"Advisor"` (case-insensitive), reads `AdvisorStateData` from overworld SavedData, transitions state to `COLONY_WITH_CITIZEN`, and sets `assignedCitizenId` to the assigned citizen's id. This is the wiring that upgrades the floating book to book-and-quill and activates full diagnostic capability.
+
+Build clean.
+
+---
+
+## Session Notes — 2026-05-10 (session 21) — COLONY_NO_CITIZEN chat routing
+
+Added COLONY_NO_CITIZEN routing block to `ChatInterceptor.java`.
+
+New `colonyNoBookAdvisor` and `colonyNoColony` variables declared before the combined-targets block. COLONY_NO_CITIZEN search: guards on `!LITE_MODE`, state == COLONY_NO_CITIZEN, `messageLower.startsWith("advisor")`, and MineColonies loaded. Finds player colony via the existing safe loop pattern (matching `isPlayerInColony`). If player is within colony bounds, finds `BookAdvisorEntity` by owner UUID within 64-block AABB. The `if (allTargets.isEmpty() && bookAdvisor == null) return;` guard extended to also include `colonyNoBookAdvisor == null` so the event is not returned early when only a COLONY_NO_CITIZEN entity is present.
+
+LLM block fires after the PRE_COLONY bookAdvisor block. Context: biome, time of day, weather, Y, terrain labels from `TerrainScanner.scan()`, building count from `getServerBuildingManager().getBuildings().size()`, Town Hall level guarded by `hasTownHall()`. Strips "advisor" prefix (case-insensitive) from message before passing to LLM. Persona: "You are Advisor, a colony advisor. You have full knowledge of the colony structure." Response delivered as `[Advisor]: [response]` via `LLMClient.query()` with scoped system prompt.
+
+Build clean.
 
 ---
 
