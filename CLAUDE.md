@@ -69,7 +69,7 @@ Before using any class name from memory, verify it exists in the NeoForge 1.21.1
       .exceptionally(ex -> { LOGGER.warn(...); return null; });
   ```
 - **Blocking `send()` is never acceptable** — not in production, not in prototypes.
-- **`max_tokens: 100` always** — NPC responses must be short.
+- **`max_tokens: 200` always** — NPC responses must be short.
 - **`stream: false` always** — No streaming.
 - **LLM responses are immersion only.** Game logic must never depend on response content. Fallback templates are always acceptable.
 

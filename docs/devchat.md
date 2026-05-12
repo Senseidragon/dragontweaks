@@ -47,7 +47,7 @@ You execute one instruction at a time. After completing each instruction you STO
 | Model | google/gemma-4-26b-a4b-it |
 | Auth | `Authorization: Bearer <key>` — key in `.env` only, never hardcoded, never committed |
 | Request format | OpenAI messages array: `[{"role":"system","content":"..."},{"role":"user","content":"..."}]` |
-| max_tokens | 100 — always, never omit |
+| max_tokens | 200 — always, never omit |
 | stream | false — always |
 
 LLM responses are immersion only — flavor text, not functional output. Game logic must never depend on response content. Fallback templates are always acceptable.
