@@ -15,7 +15,11 @@ public class RoleAssignmentData extends SavedData {
 
     public static final String NAME = "dragontweaks_roles";
 
-    private final Map<Integer, AssistantRoleRecord> assignments = new HashMap<>();
+    private final Map<String, AssistantRoleRecord> assignments = new HashMap<>();
+
+    private static String key(int colonyId, int citizenId) {
+        return colonyId + ":" + citizenId;
+    }
 
     public RoleAssignmentData() {}
 
@@ -30,23 +34,23 @@ public class RoleAssignmentData extends SavedData {
 
     // --- Public API ---
 
-    public boolean assign(int citizenId, String roleType, UUID playerUUID) {
-        assignments.put(citizenId, new AssistantRoleRecord(citizenId, roleType, System.currentTimeMillis(), playerUUID, null));
+    public boolean assign(int colonyId, int citizenId, String roleType, UUID playerUUID) {
+        assignments.put(key(colonyId, citizenId), new AssistantRoleRecord(citizenId, roleType, System.currentTimeMillis(), playerUUID, null));
         setDirty();
         return true;
     }
 
-    public void revoke(int citizenId) {
-        assignments.remove(citizenId);
+    public void revoke(int colonyId, int citizenId) {
+        assignments.remove(key(colonyId, citizenId));
         setDirty();
     }
 
-    public AssistantRoleRecord getRecord(int citizenId) {
-        return assignments.get(citizenId);
+    public AssistantRoleRecord getRecord(int colonyId, int citizenId) {
+        return assignments.get(key(colonyId, citizenId));
     }
 
-    public boolean isAssigned(int citizenId) {
-        return assignments.containsKey(citizenId);
+    public boolean isAssigned(int colonyId, int citizenId) {
+        return assignments.containsKey(key(colonyId, citizenId));
     }
 
     public Iterable<AssistantRoleRecord> getAssignments() {
@@ -66,10 +70,11 @@ public class RoleAssignmentData extends SavedData {
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider provider) {
         ListTag list = new ListTag();
-        for (Map.Entry<Integer, AssistantRoleRecord> entry : assignments.entrySet()) {
+        for (Map.Entry<String, AssistantRoleRecord> entry : assignments.entrySet()) {
             AssistantRoleRecord record = entry.getValue();
             CompoundTag recordTag = new CompoundTag();
-            recordTag.putInt("citizenId", entry.getKey());
+            recordTag.putString("key", entry.getKey());
+            recordTag.putInt("citizenId", record.citizenId());
             recordTag.putString("roleType", record.roleType());
             recordTag.putString("playerUUID", record.playerUUID().toString());
             recordTag.putLong("timestamp", record.assignmentTimestamp());
@@ -84,11 +89,12 @@ public class RoleAssignmentData extends SavedData {
         ListTag list = tag.getList("assignments", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
             CompoundTag recordTag = list.getCompound(i);
+            String entryKey = recordTag.getString("key");
             int citizenId = recordTag.getInt("citizenId");
             String roleType = recordTag.getString("roleType");
             UUID playerUUID = UUID.fromString(recordTag.getString("playerUUID"));
             long timestamp = recordTag.getLong("timestamp");
-            data.assignments.put(citizenId, new AssistantRoleRecord(citizenId, roleType, timestamp, playerUUID, null));
+            data.assignments.put(entryKey, new AssistantRoleRecord(citizenId, roleType, timestamp, playerUUID, null));
         }
         return data;
     }

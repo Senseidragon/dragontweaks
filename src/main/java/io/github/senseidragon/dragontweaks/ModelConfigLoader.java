@@ -27,6 +27,7 @@ public final class ModelConfigLoader {
 
         // Find first "model_id" value in the JSON array without an external library.
         // Expected format: [{"model_id": "some/model", ...}, ...]
+        // TODO: When blacklist is implemented, filter blacklisted model_ids before selecting index 0.
         int keyIdx = json.indexOf("\"model_id\"");
         if (keyIdx < 0) {
             DragonTweaks.LOGGER.warn("model_config.json contains no model_id field — using fallback model: {}", FALLBACK);

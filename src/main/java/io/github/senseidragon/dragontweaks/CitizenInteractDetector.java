@@ -35,7 +35,7 @@ public class CitizenInteractDetector {
         Player player = event.getEntity();
 
         RoleAssignmentData roleData = RoleAssignmentData.get(serverLevel);
-        if (roleData.isAssigned(citizenId)) return;
+        if (roleData.isAssigned(citizenData.getColony().getID(), citizenId)) return;
 
         ITownHall townHall = citizenData.getColony().getServerBuildingManager().getTownHall();
         int thLevel = (townHall != null) ? townHall.getBuildingLevel() : 1;

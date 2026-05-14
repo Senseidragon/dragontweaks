@@ -1,39 +1,15 @@
 [
     {
-        "model_id": "openai/gpt-oss-120b",
-        "cost_per_1m": 0.1095,
-        "context_window": 131072,
-        "parameter_size": "120B"
-    },
-    {
-        "model_id": "google/gemma-3-27b-it",
-        "cost_per_1m": 0.12,
-        "context_window": 131072,
-        "parameter_size": "27B"
-    },
-    {
-        "model_id": "baidu/ernie-4.5-21b-a3b-thinking",
-        "cost_per_1m": 0.175,
-        "context_window": 131072,
-        "parameter_size": "21B"
-    },
-    {
-        "model_id": "openai/gpt-oss-safeguard-20b",
-        "cost_per_1m": 0.1875,
-        "context_window": 131072,
-        "parameter_size": "20B"
-    },
-    {
         "model_id": "qwen/qwen3-30b-a3b-instruct-2507",
         "cost_per_1m": 0.195,
         "context_window": 262144,
         "parameter_size": "30B"
     },
     {
-        "model_id": "qwen/qwen3-30b-a3b-thinking-2507",
-        "cost_per_1m": 0.24,
-        "context_window": 131072,
-        "parameter_size": "30B"
+        "model_id": "google/gemma-4-31b-it",
+        "cost_per_1m": 0.245,
+        "context_window": 262144,
+        "parameter_size": "31B"
     },
     {
         "model_id": "nvidia/llama-3.3-nemotron-super-49b-v1.5",
@@ -42,28 +18,10 @@
         "parameter_size": "49B"
     },
     {
-        "model_id": "google/gemma-4-31b-it",
-        "cost_per_1m": 0.255,
-        "context_window": 262144,
-        "parameter_size": "31B"
-    },
-    {
         "model_id": "qwen/qwen3-vl-32b-instruct",
         "cost_per_1m": 0.26,
         "context_window": 131072,
         "parameter_size": "32B"
-    },
-    {
-        "model_id": "nousresearch/hermes-4-70b",
-        "cost_per_1m": 0.265,
-        "context_window": 131072,
-        "parameter_size": "70B"
-    },
-    {
-        "model_id": "nousresearch/hermes-3-llama-3.1-70b",
-        "cost_per_1m": 0.3,
-        "context_window": 131072,
-        "parameter_size": "70B"
     },
     {
         "model_id": "qwen/qwen3-next-80b-a3b-thinking",
@@ -84,57 +42,9 @@
         "parameter_size": "80B"
     },
     {
-        "model_id": "sao10k/l3.3-euryale-70b",
-        "cost_per_1m": 0.7,
-        "context_window": 131072,
-        "parameter_size": "70B"
-    },
-    {
         "model_id": "deepseek/deepseek-r1-distill-llama-70b",
         "cost_per_1m": 0.75,
         "context_window": 131072,
         "parameter_size": "70B"
-    },
-    {
-        "model_id": "qwen/qwen3-235b-a22b-thinking-2507",
-        "cost_per_1m": 0.8223,
-        "context_window": 131072,
-        "parameter_size": "235B"
-    },
-    {
-        "model_id": "qwen/qwen3-vl-30b-a3b-thinking",
-        "cost_per_1m": 0.845,
-        "context_window": 131072,
-        "parameter_size": "30B"
-    },
-    {
-        "model_id": "sao10k/l3.1-euryale-70b",
-        "cost_per_1m": 0.85,
-        "context_window": 131072,
-        "parameter_size": "70B"
-    },
-    {
-        "model_id": "nousresearch/hermes-3-llama-3.1-405b",
-        "cost_per_1m": 1.0,
-        "context_window": 131072,
-        "parameter_size": "405B"
-    },
-    {
-        "model_id": "qwen/qwen3-235b-a22b",
-        "cost_per_1m": 1.1375,
-        "context_window": 131072,
-        "parameter_size": "235B"
-    },
-    {
-        "model_id": "qwen/qwen3-vl-235b-a22b-thinking",
-        "cost_per_1m": 1.43,
-        "context_window": 131072,
-        "parameter_size": "235B"
-    },
-    {
-        "model_id": "nousresearch/hermes-4-405b",
-        "cost_per_1m": 2.0,
-        "context_window": 131072,
-        "parameter_size": "405B"
     }
 ]

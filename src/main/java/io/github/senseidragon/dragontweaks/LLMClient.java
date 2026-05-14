@@ -24,6 +24,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 
 public class LLMClient {
@@ -157,9 +158,10 @@ public class LLMClient {
         obj.add("messages", messages);
         obj.addProperty("max_tokens", MAX_RESPONSE_TOKENS);
         obj.addProperty("stream", false);
-        JsonObject reasoning = new JsonObject();
-        reasoning.addProperty("effort", "none");
-        obj.add("reasoning", reasoning);
+        // TODO: re-enable when switching back to a model that supports effort:none (e.g. google/gemma-4-26b-a4b-it)
+        // JsonObject reasoning = new JsonObject();
+        // reasoning.addProperty("effort", "none");
+        // obj.add("reasoning", reasoning);
         return GSON.toJson(obj);
     }
 
@@ -168,6 +170,63 @@ public class LLMClient {
             Component.literal("[").append(entityName)
                 .append("]: My thoughts escape me for the moment.")
         );
+    }
+
+    public static void query(MinecraftServer server, ServerPlayer player,
+                             Component entityName, String message,
+                             UUID npcId, String systemPrompt,
+                             Consumer<String> onReply) {
+        if (!Config.LLM_ENABLED.get()) {
+            server.execute(() -> sendFallback(player, entityName));
+            return;
+        }
+        ensureAlive();
+
+        String apiKey = EnvLoader.get("OPENROUTER_API_KEY");
+        if (apiKey == null) {
+            DragonTweaks.LOGGER.error("[LLMClient] OPENROUTER_API_KEY not found in .env — using fallback");
+            server.execute(() -> sendFallback(player, entityName));
+            return;
+        }
+
+        String npcName = entityName.getString();
+        String playerName = player.getGameProfile().getName();
+        String history = ConversationMemory.getHistory(npcId, playerName);
+        String userContent = history.isEmpty()
+            ? playerName + " says: " + message
+            : "[Prior conversation:]\n" + history + "\n\n" + playerName + " says: " + message;
+        String requestBody = buildRequestBody(ModelConfigLoader.getModel(), userContent, systemPrompt);
+
+        HttpRequest request;
+        try {
+            request = buildRequest(requestBody, apiKey);
+        } catch (IllegalArgumentException e) {
+            DragonTweaks.LOGGER.error("[LLMClient] Invalid endpoint URI: {}", e.getMessage());
+            server.execute(() -> sendFallback(player, entityName));
+            return;
+        }
+
+        try {
+            HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .orTimeout(Config.LLM_TIMEOUT_SECONDS.get(), TimeUnit.SECONDS)
+                .thenApply(response -> parseResponse(response.body()))
+                .thenAccept(reply -> server.execute(() -> {
+                    player.sendSystemMessage(
+                        Component.literal("[").append(entityName).append("]: " + reply)
+                    );
+                    ConversationMemory.addExchange(npcId, playerName,
+                        playerName + ": " + message, npcName + ": " + reply);
+                    if (onReply != null) onReply.accept(reply);
+                }))
+                .exceptionally(ex -> {
+                    DragonTweaks.LOGGER.warn("[LLMClient] LLM request failed: {}", ex.getMessage());
+                    server.execute(() -> sendFallback(player, entityName));
+                    return null;
+                });
+        } catch (Exception e) {
+            DragonTweaks.LOGGER.error("[LLMClient] Failed to dispatch async request: {}", e.getMessage());
+            server.execute(() -> sendFallback(player, entityName));
+        }
     }
 
     public static void shutdown() {
@@ -221,7 +280,7 @@ public class LLMClient {
                 + "Always respond in the language identified by locale code: " + locale + ".\n";
         String userContent = "You just noticed: " + whatChanged +
                              ". React in character in 1-2 short sentences. Address " + playerName + " directly.";
-        String requestBody = buildRequestBody(Config.LLM_MODEL.get(), userContent, systemPrompt);
+        String requestBody = buildRequestBody(ModelConfigLoader.getModel(), userContent, systemPrompt);
 
         HttpRequest request;
         try {
@@ -292,7 +351,7 @@ public class LLMClient {
         String userContent = history.isEmpty()
             ? playerName + " says: " + message
             : "[Prior conversation:]\n" + history + "\n\n" + playerName + " says: " + message;
-        String requestBody = buildRequestBody(Config.LLM_MODEL.get(), userContent, systemPrompt);
+        String requestBody = buildRequestBody(ModelConfigLoader.getModel(), userContent, systemPrompt);
 
         HttpRequest request;
         try {

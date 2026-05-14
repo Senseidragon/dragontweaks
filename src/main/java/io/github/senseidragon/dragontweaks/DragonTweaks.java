@@ -108,6 +108,7 @@ public class DragonTweaks {
                 AdvisorDiagnosticLoop.markDirty(colonyId);
                 if (!(e.getColony().getWorld() instanceof ServerLevel level)) return;
                 NicknameData.get(level.getServer().overworld()).removeNickname(colonyId, e.getCitizen().getId());
+                CitizenConversationMemory.get(level.getServer().overworld()).clearHistory(colonyId, e.getCitizen().getId());
                 String citizenName = e.getCitizen().getName();
                 String prompt = citizenName + " has died. React with grief or shock in character.";
                 ObservationTicker.fireColonyEventObservation(level.getServer(), level, prompt);

@@ -1,5 +1,7 @@
 package io.github.senseidragon.dragontweaks;
 
+import com.minecolonies.api.colony.IColony;
+import com.minecolonies.api.colony.IColonyManager;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
@@ -8,6 +10,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
+import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 
@@ -37,14 +40,29 @@ public record RoleSelectionPacket(int citizenId, String selectedRole) implements
         if (DragonTweaks.LITE_MODE) return;
         ctx.enqueueWork(() -> {
             if (!(ctx.player() instanceof ServerPlayer player)) return;
+            if (!ModList.get().isLoaded("minecolonies")) return;
             ServerLevel overworld = player.getServer().getLevel(Level.OVERWORLD);
             if (overworld == null) return;
+
+            IColony colony = null;
+            outer:
+            for (ServerLevel lvl : player.getServer().getAllLevels()) {
+                for (IColony c : IColonyManager.getInstance().getColonies(lvl)) {
+                    if (player.getUUID().equals(c.getPermissions().getOwner())) {
+                        colony = c;
+                        break outer;
+                    }
+                }
+            }
+            if (colony == null) return;
+            int colonyId = colony.getID();
+
             RoleAssignmentData roleData = RoleAssignmentData.get(overworld);
-            if (roleData.isAssigned(packet.citizenId())) {
+            if (roleData.isAssigned(colonyId, packet.citizenId())) {
                 player.sendSystemMessage(Component.literal("This citizen already has a role assigned."));
                 return;
             }
-            roleData.assign(packet.citizenId(), packet.selectedRole(), player.getUUID());
+            roleData.assign(colonyId, packet.citizenId(), packet.selectedRole(), player.getUUID());
             player.sendSystemMessage(Component.literal("Role assigned: " + packet.selectedRole() + "."));
             if (packet.selectedRole().equalsIgnoreCase("Advisor")) {
                 AdvisorStateData advisorData = AdvisorStateData.get(overworld);

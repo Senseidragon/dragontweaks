@@ -1,7 +1,9 @@
 package io.github.senseidragon.dragontweaks;
 
+import com.minecolonies.api.colony.ICitizenData;
 import com.minecolonies.api.colony.IColony;
 import com.minecolonies.api.colony.IColonyManager;
+import com.minecolonies.api.colony.IVisitorData;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -200,7 +202,45 @@ public class ChatInterceptor {
         List<AssistantEntity> allTargets = new ArrayList<>(advisorTargets);
         allTargets.addAll(nonAdvisorTargets);
 
-        if (allTargets.isEmpty() && bookAdvisor == null && colonyNoBookAdvisor == null && colonyWithBookAdvisor == null) return;
+        // Citizen conversation detection
+        IColony citizenColony = null;
+        ICitizenData matchedCitizen = null;
+        String matchedDisplayName = null;
+        String matchedJobDesc = null;
+        if (ModList.get().isLoaded("minecolonies") && !rawMessage.isEmpty()) {
+            for (IColony c : IColonyManager.getInstance().getColonies(serverLevel)) {
+                if (player.getUUID().equals(c.getPermissions().getOwner())) {
+                    citizenColony = c;
+                    break;
+                }
+            }
+            if (citizenColony != null) {
+                ServerLevel overworld = player.getServer().overworld();
+                RoleAssignmentData roleData = RoleAssignmentData.get(overworld);
+                int cId = citizenColony.getID();
+                for (ICitizenData citizen : citizenColony.getCitizenManager().getCitizens()) {
+                    if (citizen instanceof IVisitorData) continue;
+                    if (roleData.isAssigned(citizenColony.getID(), citizen.getId())) continue;
+                    String displayName = NicknameData.resolve(overworld, cId, citizen.getId(), citizen.getName());
+                    boolean nicknameMatch = messageLower.contains(displayName.toLowerCase());
+                    boolean realNameMatch = !displayName.equalsIgnoreCase(citizen.getName())
+                        && messageLower.contains(citizen.getName().toLowerCase());
+                    if (!nicknameMatch && !realNameMatch) continue;
+                    matchedCitizen = citizen;
+                    matchedDisplayName = displayName;
+                    String jobDesc = "an unemployed colonist";
+                    var job = citizen.getJob();
+                    if (job != null) {
+                        String jn = job.getNameTagDescription();
+                        if (jn != null && !jn.isBlank()) jobDesc = jn;
+                    }
+                    matchedJobDesc = jobDesc;
+                    break;
+                }
+            }
+        }
+
+        if (allTargets.isEmpty() && bookAdvisor == null && colonyNoBookAdvisor == null && colonyWithBookAdvisor == null && matchedCitizen == null) return;
 
         // Keyword detection — runs before LLM query; state change is immediate
         boolean isFollowIntent = containsAny(messageLower, "follow", "come with", "walk with me", "come along", "come here", "follow me");
@@ -369,6 +409,28 @@ public class ChatInterceptor {
                 ? advisorEntity.getCustomName()
                 : Component.literal("Advisor");
             player.sendSystemMessage(Component.literal("[" + entityName.getString() + "]: " + advisorReminder));
+        }
+
+        // Citizen conversation routing
+        if (matchedCitizen != null && citizenColony != null) {
+            ServerLevel overworld = player.getServer().overworld();
+            CitizenConversationMemory citizenMemory = CitizenConversationMemory.get(overworld);
+            final int fColonyId = citizenColony.getID();
+            final int fCitizenId = matchedCitizen.getId();
+            final String fDisplayName = matchedDisplayName;
+            final String fJobDesc = matchedJobDesc;
+            final String playerName = player.getGameProfile().getName();
+            String systemPrompt =
+                "You are " + fDisplayName + ", a MineColonies citizen working as " + fJobDesc + ". " +
+                "Respond in character as a " + fJobDesc + " in a medieval colony. Keep responses brief.";
+            UUID citizenNpcId = UUID.nameUUIDFromBytes(
+                ("citizen:" + fColonyId + ":" + fCitizenId).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            LLMClient.query(server, player, Component.literal(fDisplayName), rawMessage,
+                citizenNpcId, systemPrompt,
+                reply -> {
+                    citizenMemory.appendHistory(fColonyId, fCitizenId, playerName, rawMessage);
+                    citizenMemory.appendHistory(fColonyId, fCitizenId, fDisplayName, reply);
+                });
         }
     }
 

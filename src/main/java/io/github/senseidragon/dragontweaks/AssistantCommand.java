@@ -97,6 +97,9 @@ public class AssistantCommand {
                     )
                 )
         );
+        if (DebugConfig.DEBUG_ENABLED) {
+            AssistantDebugCommand.register(event.getDispatcher());
+        }
     }
 
     private static int spawnWithNameAndRole(CommandContext<CommandSourceStack> ctx, String name, String role) throws CommandSyntaxException {
@@ -300,13 +303,13 @@ public class AssistantCommand {
             for (IColony colony : IColonyManager.getInstance().getColonies(level)) {
                 // TODO: verify colony.getCitizenManager().getCitizens() against stubs
                 for (ICitizenData citizen : colony.getCitizenManager().getCitizens()) {
-                    if (!roleData.isAssigned(citizen.getId())) continue;
+                    if (!roleData.isAssigned(colony.getID(), citizen.getId())) continue;
                     // TODO: verify ICitizenData.getName() against stubs
                     String citizenName = citizen.getName();
                     if (nameMatches(citizenName, input)) {
                         matchedCitizenId = citizen.getId();
                         matchedCitizenName = citizenName;
-                        matchedRoleType = roleData.getRecord(matchedCitizenId).roleType();
+                        matchedRoleType = roleData.getRecord(colony.getID(), matchedCitizenId).roleType();
                         matchedColony = colony;
                         matchedLevel = level;
                         break search;
@@ -320,7 +323,7 @@ public class AssistantCommand {
             return 0;
         }
 
-        roleData.revoke(matchedCitizenId);
+        roleData.revoke(matchedColony.getID(), matchedCitizenId);
 
         final String citizenName = matchedCitizenName;
         ctx.getSource().sendSuccess(() -> Component.literal(citizenName + "'s role has been revoked."), false);
@@ -403,7 +406,9 @@ public class AssistantCommand {
         ICitizenData citizen = matches.get(0);
         NicknameData.get(overworld).setNickname(colony.getID(), citizen.getId(), nickname);
         final String citizenName = citizen.getName();
-        ctx.getSource().sendSuccess(() -> Component.literal("Nickname '" + nickname + "' assigned to " + citizenName + "."), false);
+        final int citizenId = citizen.getId();
+        ctx.getSource().sendSuccess(() -> Component.literal(
+            "[DragonTweaks] Nickname set: " + citizenName + " (id=" + citizenId + ") → \"" + nickname + "\""), false);
         return 1;
     }
 
