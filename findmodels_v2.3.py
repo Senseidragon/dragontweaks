@@ -56,17 +56,26 @@ def fetch_and_rank_models(filters):
         if filters.get('flavor') and context < 128000: continue # Redundant but kept for mode logic
 
         try:
-            p_cost = float(pricing.get('prompt', 0)) * 1_000_000
-            c_cost = float(pricing.get('completion', 0)) * 1_000_000
+            input_cost = float(pricing.get('prompt', 0)) * 1_000_000
+            output_cost = float(pricing.get('completion', 0)) * 1_000_000
+
+            # Eigent-style agent workloads appear input/context heavy during learning runs.
+            # Keep the old blended metric for comparison, but rank by this estimate.
+            blended_cost = (input_cost + output_cost) / 2
+            agent_learning_cost = (input_cost * 0.85) + (output_cost * 0.15)
+
             eligible_models.append({
-                "model_id": model.get('id'), 
-                "cost_per_1m": round((p_cost + c_cost) / 2, 4),
+                "model_id": model.get('id'),
+                "input_cost_per_1m": round(input_cost, 4),
+                "output_cost_per_1m": round(output_cost, 4),
+                "blended_cost_per_1m": round(blended_cost, 4),
+                "agent_learning_cost_per_1m": round(agent_learning_cost, 4),
                 "context_window": context,
                 "parameter_size": f"{size_match.group(1)}B"
             })
         except: continue
 
-    eligible_models.sort(key=lambda x: x["cost_per_1m"])
+    eligible_models.sort(key=lambda x: x["agent_learning_cost_per_1m"])
     top_models = eligible_models[:LIMIT]
 
     with open(JSON_FILE, "w") as f:
