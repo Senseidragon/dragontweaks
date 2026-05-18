@@ -1,168 +1,155 @@
-**# CLAUDE.md
+# CLAUDE.md
 
-This file provides guidance to Claude Code when working with code in this repository.
+Guidance for Claude Code when working in this repository.
 Read this file completely before touching any source file. Do not summarize or skip sections.
 
 ---
 
 ## Session Startup — Required Every Time
 
-Before beginning any task:
-1. Read `docs/devchat.md` in full
-2. Confirm the current branch is `phase-1`
-3. Run `./gradlew build` and confirm it is clean
-4. Report branch and build status before proceeding
+1. Read `docs/devchatindex.md` — this is the entry point for all session context.
+2. Follow its "What To Read For Which Task" table. Read only the docs listed for your task.
+3. Confirm the current branch is `phase-1`.
+4. Run `./gradlew build` and confirm it is clean.
+5. Report branch and build status before proceeding.
 
-Do not begin any task until these three steps are complete and reported.
+Do not begin any task until all five steps are complete and reported.
 
 ---
 
 ## Agent Behavior Rules — Never Violate
 
-- **No sub-agents. Ever.** Do not spawn subagents, parallel agents, or multi-agent workflows under any circumstances. They burn tokens and produce unreliable results. All work is done sequentially by this agent alone.
-- **No Superpowers plugin features.** Do not invoke brainstorming skills, design approval flows, or any Superpowers-specific workflow. Execute tasks directly.
+- **No sub-agents. Ever.** Do not spawn subagents, parallel agents, or multi-agent workflows. All work is done sequentially by this agent alone.
 - **Read before writing.** Always read a file before modifying it. Never modify a file you have not read in this session.
-- **One task at a time.** Complete the current task, report results, and stop. Do not proceed to the next task without explicit direction.
-- **Do not read files you have not been directed to read.** Stay on task.
-- **Do not refactor unrelated code** while fixing a bug or implementing a feature. One concern at a time.
-- **Typos in instructions:** If a filename or instruction contains an obvious typo, correct it using common sense and proceed. Do not stop to investigate.
+- **One task at a time.** Complete the current task, report results, and stop. Do not proceed without explicit direction.
+- **Do not read files you have not been directed to read.** Stay on task. `docs/devchatindex.md` tells you exactly what to read for each task type.
+- **Do not refactor unrelated code** while fixing a bug or implementing a feature.
+- **Typos in instructions:** If a filename or instruction contains an obvious typo, correct it using common sense and proceed.
+- **Never guess at root causes.** Trace the full execution path from uploaded source files before writing any fix.
+- **Strip punctuation before string comparisons** in any trigger matching code.
 
 ---
 
 ## Hard Architectural Rules — Never Violate
 
-1. **Nothing may ever block the main Minecraft game thread.** Non-negotiable.
-2. **All network calls (including OpenRouter HTTP requests) must be async** using `HttpClient.sendAsync()` + `CompletableFuture` + `orTimeout()`.
+1. **Nothing may ever block the main Minecraft game thread.** Non-negotiable under any circumstances.
+2. **All network calls must be async** using `HttpClient.sendAsync()` + `CompletableFuture` + `orTimeout()`. Blocking `send()` is never acceptable — not in production, not in prototypes.
 3. **Async responses must be queued back to the main thread** via `server.execute()` before any game interaction.
-4. **Zero interference with MineColonies internals.** All MineColonies integration via public API and event bus only. Citizens are never directly modified.
-5. **All MineColonies API calls must be verified against stubs in `docs/stubs/`** before any dependent code is written. Report what you find before writing.
-6. **Never hardcode config values.** All tunable values must live in `Config.java`.
+
+   Mandatory async pattern:
+   ```java
+   httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+       .orTimeout(Config.LLM_TIMEOUT_SECONDS.get(), TimeUnit.SECONDS)
+       .thenApply(parseResponse)
+       .thenAccept(reply -> server.execute(() -> { /* game thread work */ }))
+       .exceptionally(ex -> { LOGGER.warn(...); return null; });
+   ```
+
+4. **Zero interference with MineColonies internals.** All integration via public API and event bus only. Citizens are never directly modified.
+5. **All MineColonies API calls must be verified against stubs in `docs/stubs/`** before any dependent code is written. Report what you find before writing. Use `docs/STUB_INDEX.md` to locate specific stubs.
+6. **Never hardcode config values.** All tunable values live in `Config.java`.
 7. **API key lives in `.env` only.** Never in source, never logged, never transmitted to clients.
+8. **LLM responses are immersion only.** Game logic must never depend on LLM response content. Fallback templates are always acceptable.
 
 ---
 
-## NeoForge 1.21.1 — Known Class Name Traps
+## LLM Client
 
-These are confirmed wrong vs right for NeoForge 1.21.1. Do not use the wrong names under any circumstances:
-
-| Wrong (1.20.x) | Correct (1.21.1) |
-|---|---|
-| `HumanoidMob` | Does not exist — use `PathfinderMob` |
-| `setHomePosAndDistance(BlockPos, int)` | Does not exist — use `restrictTo(BlockPos, int)` on `Mob` |
-| `RestrictedWaterAvoidingRandomWalkingGoal` | Does not exist — use `WaterAvoidingRandomStrollGoal` + `MoveTowardsRestrictionGoal` |
-| `OllamaClient` | Does not exist in this project — LLM client is `LLMClient.java` |
-
-Before using any class name from memory, verify it exists in the NeoForge 1.21.1 decompiled sources. Report what you find. Do not assume 1.20.x names carry over.
-
----
-
-## LLM Client Architecture
-
-- **Provider:** OpenRouter (server-side only)
-- **Client class:** `LLMClient.java` — instantiable class with explicit lifecycle management. Not a static utility class.
-- **Async pattern (mandatory):**
-  ```java
-  httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-      .orTimeout(Config.LLM_TIMEOUT_SECONDS.get(), TimeUnit.SECONDS)
-      .thenApply(parseResponse)
-      .thenAccept(reply -> server.execute(() -> { /* game thread work */ }))
-      .exceptionally(ex -> { LOGGER.warn(...); return null; });
-  ```
-- **Blocking `send()` is never acceptable** — not in production, not in prototypes.
-- **`max_tokens: 200` always** — NPC responses must be short.
-- **`stream: false` always** — No streaming.
-- **LLM responses are immersion only.** Game logic must never depend on response content. Fallback templates are always acceptable.
+- **Provider:** OpenRouter
+- **Endpoint:** `https://openrouter.ai/api/v1/chat/completions`
+- **Client class:** `LLMClient.java` — do not rename, do not recreate, do not add a second HTTP client.
+- **Model:** `google/gemma-4-26b-a4b-it` (from `Config.java` — do not hardcode)
+- **`max_tokens`: 200** for all standard NPC calls. Functional roles (Advisor, Planner) may require higher budgets — check the spec before changing this value.
+- **`stream: false` always.**
+- **Reasoning block:** Commented out in `LLMClient.java` — intentional. Current model rejects `effort:none`. Do not uncomment without explicit instruction.
 
 ---
 
 ## MineColonies API Patterns
 
-- **Event subscription:** `IMinecoloniesAPI.getInstance().getEventBus().subscribe(EventClass.class, handler)` — not the NeoForge event bus.
-- **Colony lookup by level:** `IColonyManager.getInstance().getColonies(level)` — returns `List<IColony>` for all colonies in a level.
-- **Raid state:** `colony.getRaiderManager().isRaided()` — poll for state flip; no subscribable raid-started event exists.
-- **Citizen death event:** `CitizenDiedModEvent` — accessor: `e.getColony().getWorld()` cast to `ServerLevel`
-- **Building construction event:** `BuildingConstructionModEvent` — accessor: `e.getBuilding().getBuildingType().getTranslationKey()`
-- **MineColonies guard:** Always wrap MineColonies API calls with `if (!ModList.get().isLoaded("minecolonies")) return;`
-- **Happiness factors:** Ten canonical factor IDs — food, slepttonight, housing, health, unemployment, idleatjob, security, school, social, mystical
-- **No native commute happiness factor** — derive commute distance from building positions manually
-- **`doDaylightCycle` gamerule** — query via Minecraft's native `GameRules` system, not MineColonies API
+- **MineColonies guard:** Always wrap calls with `if (!ModList.get().isLoaded("minecolonies")) return;`
+- **Event subscription:** `IMinecoloniesAPI.getInstance().getEventBus().subscribe(...)` — not the NeoForge event bus.
+- **Colony lookup:** `IColonyManager.getInstance().getColonies(level)` → `List<IColony>`
+- **Raid state:** `colony.getRaiderManager().isRaided()` — poll only; no subscribable raid-started event.
+- **Colony age:** `IColony.getDay()` → `int`
+- **Colony boundary:** `IColony.isCoordInColony(world, pos)`
+- **Town Hall level:** `colony.getServerBuildingManager().getTownHall().getBuildingLevel()`
+- **Happiness factors:** Ten canonical IDs only — `food`, `slepttonight`, `housing`, `health`, `unemployment`, `idleatjob`, `security`, `school`, `social`, `mystical`
+- **No native commute factor** — derive commute distance from building positions manually.
+- **`doDaylightCycle` gamerule** — query via Minecraft's native `GameRules` system, not MineColonies API.
+- **Warehouse stock:** `AbstractTileEntityWareHouse.getMatchingItemStacksInWarehouse(Predicate<ItemStack>)` — query per material; no full-dump method exists.
 
 ---
 
-## NPC Wander Restriction
+## NeoForge 1.21.1 — Class Name Traps
 
-- Call `this.restrictTo(blockPos, radius)` on `Mob` to set a home anchor and radius
-- `WaterAvoidingRandomStrollGoal` respects the restriction automatically via `GoalUtils.isRestricted()`
-- Add `MoveTowardsRestrictionGoal` alongside it to pull the NPC back if it strays
-- Always call `restrictTo()` at spawn time via `finalizeSpawn()` override
-- Always call `restrictTo()` again when a stop/stay command is issued, using `npc.blockPosition()` as the new anchor
+These names do not exist in NeoForge 1.21.1. Using them will break the build:
+
+| Wrong (do not use) | Correct |
+|---|---|
+| `HumanoidMob` | `PathfinderMob` |
+| `setHomePosAndDistance(BlockPos, int)` | `restrictTo(BlockPos, int)` on `Mob` |
+| `RestrictedWaterAvoidingRandomWalkingGoal` | `WaterAvoidingRandomStrollGoal` + `MoveTowardsRestrictionGoal` |
+| `OllamaClient` | Does not exist — LLM client is `LLMClient.java` |
+
+Before using any class name not in the above table, verify it exists in NeoForge 1.21.1 sources. Do not assume 1.20.x names carry over.
 
 ---
 
-## What Does Not Exist Yet
+## NPC Wander Restriction Pattern
 
-These files do not exist in the codebase. Do not reference them, do not assume they exist, do not attempt to import them:
+- `this.restrictTo(blockPos, radius)` on `Mob` sets home anchor and radius.
+- `WaterAvoidingRandomStrollGoal` respects restriction automatically.
+- Add `MoveTowardsRestrictionGoal` alongside it.
+- Call `restrictTo()` at spawn via `finalizeSpawn()` override.
+- Call `restrictTo()` again on stop/stay command using `npc.blockPosition()` as the new anchor.
 
-- `CitizenInteractDetector.java` — right-click citizen detection, not built
-- `RoleAssignmentScreen.java` — client-side role assignment UI, not built
+---
 
-The write path for `RoleAssignmentData` also does not exist yet. Nothing currently writes to it.
+## Files You Must Not Modify Without Explicit Instruction
+
+- `DragonTweaks.java` — restructure only if explicitly directed
+- `LLMClient.java`
+- `Config.java`
+- `RoleAssignmentData.java`
+- `ColonyDiagnosticReport.java`
+- `PlannerDependencyRegistry.java`
+
+---
+
+## Source of Truth for Current File Status
+
+`docs/current_state.md` is the authoritative list of all source files and their completion status. Check it before assuming any file does or does not exist. Do not rely on memory or this file for that information.
 
 ---
 
 ## Build Commands
 
 ```bash
-# Standard build — run after every change
-./gradlew build
-
-# Clean build outputs
-./gradlew clean
-
-# Refresh dependencies
+./gradlew build              # Standard build — run after every change
+./gradlew clean              # Clean build outputs
 ./gradlew --refresh-dependencies
-
-# Run data generators
-./gradlew runData
-
-# Launch client with mod loaded
-./gradlew runClient
-
-# Launch server with mod loaded
-./gradlew runServer
+./gradlew runData            # Run data generators
+./gradlew runClient          # Launch client with mod loaded
+./gradlew runServer          # Launch server with mod loaded
 ```
 
-Built JAR ends up in `build/libs/`. Mod metadata is injected at build time from `gradle.properties`.
+Built JAR ends up in `build/libs/`.
 
 ---
 
 ## Project Identity
 
-- **Mod:** DragonTweaks (Assistant Mod)
-- **Platform:** NeoForge 1.21.1, Java 21
-- **Mod ID:** `dragontweaks`
-- **Package:** `io.github.senseidragon.dragontweaks`
-- **Source root:** `src/main/java/io/github/senseidragon/dragontweaks/`
-- **Branch:** `phase-1`
-- **NeoForge version:** `21.1.226`
-- **Parchment mappings:** `2024.11.17`
-- **MineColonies API stubs:** `docs/stubs/` — index at `docs/STUB_INDEX.md`
-
----
-
-## Key Architecture Notes
-
-**Entry points:**
-- `DragonTweaks.java` — Main mod class (`@Mod`). Bootstraps DeferredRegisters, registers event listeners on both mod event bus and NeoForge game event bus, loads config spec, validates API key on startup.
-- `DragonTweaksClient.java` — Client-only (`@Mod(dist = Dist.CLIENT)`). Safe from server-side classloading.
-
-**Registration pattern:** All game objects use NeoForge `DeferredRegister` pattern, declared as `static final` fields, bound to the mod event bus in the constructor.
-
-**Config:** `Config.java` uses `ModConfigSpec`. Values accessed statically. All new config values follow the existing pattern exactly.
-
-****ObservationTicker:** Fires every 100 ticks (`TICK_INTERVAL = 100`). Guarded by `NPC_OBSERVATIONS_ENABLED`. Silent-drop pattern: if no qualifying player is in range, no LLM call is made and no error is logged. Greeting trigger and raid poll both run on this same interval.
-
-**Greeting system:** Per-player cooldown tracked as `Map<UUID, Long>` on `AssistantEntity`. Roll fires on player entering detection range. Only fires if player is within `COMMAND_PROXIMITY`. Uses plain AABB check — not `findTarget()` — because greeting fires before ConversationMemory history exists.
+| Field | Value |
+|---|---|
+| Mod | DragonTweaks (Assistant Mod — final name TBD) |
+| Mod ID | `dragontweaks` |
+| Package | `io.github.senseidragon.dragontweaks` |
+| Source root | `src/main/java/io/github/senseidragon/dragontweaks/` |
+| Branch | `phase-1` |
+| Platform | NeoForge 21.1.226, Java 21, Minecraft 1.21.1 |
+| Parchment mappings | `2024.11.17` |
+| MineColonies API stubs | `docs/stubs/` — index at `docs/STUB_INDEX.md` |
 
 ---
 
@@ -171,13 +158,9 @@ Built JAR ends up in `build/libs/`. Mod metadata is injected at build time from 
 After completing any task that touches source files, config, or project structure:
 
 1. Update `docs/devchat.md`:
-   - Set the `Last updated` date at the top to today's date
-   - Update the file table (`What Exists Right Now`) to reflect any files added, removed, or changed
-   - Add a session note under `Session Notes` summarizing what was done and any decisions made
-   - If a design decision was locked, add it to `Design Decisions — Locked`
+   - Set `Last updated` date at the top.
+   - Update the file table (`What Exists Right Now`) for any files added, removed, or changed.
+   - Add a session note under `Session Notes`.
+2. If `./gradlew build` passed, update `dragontweaks_verification_checklist.md` to reflect newly verified behaviors.
 
-2. If the task completed a step in `What To Build Next`, strike it through and mark it ✅ Done with a brief note.
-
-3. If `./gradlew build` passed, update `dragontweaks_verification_checklist.md` to reflect any newly verified behaviors.
-
-Do not skip this step. Do not mark a task complete without doing this first.
+Do not skip this step. Do not mark a task complete without doing it first.

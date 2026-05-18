@@ -95,6 +95,10 @@ public class Config {
             .comment("Server operator override: force all Advisor responses to private delivery regardless of length")
             .define("advisorForcePrivate", false);
 
+    public static final ModConfigSpec.IntValue ADVISOR_ROOTCAUSE_SUPPRESS_DAYS = BUILDER
+            .comment("Colony days to suppress repeat Advisor observations for a citizen whose root cause has not changed")
+            .defineInRange("advisorRootcauseSuppressDays", 2, 0, 30);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     static void onLoad(ModConfigEvent event) {

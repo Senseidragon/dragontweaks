@@ -1,5 +1,5 @@
 # DragonTweaks — Master Open Questions Log
-*Last updated: 2026-05-07*
+*Last updated: 2026-05-17 (session 27)*
 *Purpose: Single source of truth for all unresolved questions. Check this before starting any design or implementation session.*
 
 ---
@@ -15,15 +15,12 @@
 ---
 
 ## Source Verification Items
-*All resolved 2026-05-07.*
+*Resolvable by Claude Code reading stubs — no design session required.*
 
-| # | Status | Question | Answer |
+| # | Status | Question | Blocks |
 |---|---|---|---|
-| V1 | ✅ | `greatfood` happiness modifier ID | **Omit entirely.** Runtime string not visible from stubs. Implement only the ten confirmed canonical IDs. Constant name `HADGREATFOOD` noted for reference only. |
-| V2 | ✅ | Red/yellow happiness threshold values | **Design decision — no API tiers exist.** `factor < 0.5` = red, `0.5 ≤ factor < 0.9` = yellow, `factor ≥ 0.9` = healthy. Make these config values. |
-| V3 | ✅ | Colony age in days queryable? | **Confirmed.** `IColony.getDay()` returns `int`. Source: `IColony.java` line 81. |
-| V4 | ✅ | Warehouse inventory API | **Partial — sufficient.** `getMatchingItemStacksInWarehouse(Predicate<ItemStack>)` returns `List<Tuple<ItemStack, BlockPos>>`. Source: `AbstractTileEntityWareHouse.java` line 8. No full-dump method — query per material using predicate. |
-| V5 | ✅ | OpenRouter reasoning disable syntax | **Confirmed.** `{"reasoning": {"effort": "none"}}`. Add to `LLMClient.java` request body. |
+| B1 | 🔲 | `RaidStartedEvent` — verify package path against `docs/stubs/` | `DragonTweaks.java` invalidation trigger (branching spec Section 5) |
+| B2 | 🔲 | `CitizenRecord` field names for red/yellow flags, commute flag, and root cause ordinal — verify against current `ColonyDiagnosticReport` implementation | Pre-scan and suppression key logic (branching spec Sections 1 and 4.2) |
 
 ---
 
@@ -32,7 +29,7 @@
 
 | # | Status | Question | Blocks |
 |---|---|---|---|
-| D1 | 🔲 | Advisor happiness diagnostic branching logic — `Observe → Diagnose → Recommend` as implementable code spec | Advisor implementation |
+| D1 | ✅ | Advisor happiness diagnostic branching logic — `Observe → Diagnose → Recommend` as implementable code spec | Resolved 2026-05-17 — see `docs/advisor_branching_spec_v0_2.md` |
 | D2 | 🔲 | Dependency data spec — enumerated building list with full chains for Planner goal input mode | Planner goal input mode |
 
 ---
@@ -57,6 +54,7 @@
 
 | # | Question | Answer | Date |
 |---|---|---|---|
+| D1 | Advisor branching logic — `Observe → Diagnose → Recommend` as implementable spec | Pre-scan 5 citizens, output top 2, per-day throttle, root cause suppression window. Full spec: `docs/advisor_branching_spec_v0_2.md` | 2026-05-17 |
 | V1 | `greatfood` modifier ID | Omit — ten confirmed canonical IDs only | 2026-05-07 |
 | V2 | Red/yellow happiness thresholds | red < 0.5 / yellow 0.5–0.9 / healthy ≥ 0.9 | 2026-05-07 |
 | V3 | Colony age API | `IColony.getDay()` returns int | 2026-05-07 |

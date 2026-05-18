@@ -1,7 +1,7 @@
 # DragonTweaks — Current State Document
 *Replaces the original devchat.md as the active reference for Claude Code.*
 *Full session history archived in devchat_archive.md — do not delete.*
-*Last updated: 2026-05-13 (session 24)*
+*Last updated: 2026-05-17 (session 28)*
 
 ---
 
@@ -67,9 +67,9 @@ All source files are in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `ChatInterceptor.java` | ✅ Complete | Intercepts player chat, routes to LLM, multi-NPC addressing; PRE_COLONY BookAdvisorEntity prompt now includes block scan terrain labels (32×8×32 radius, step 2) added 2026-05-10; scanTerrainLabels extracted to TerrainScanner 2026-05-10; COLONY_NO_CITIZEN BookAdvisorEntity routing block added 2026-05-10 (session 21); citizen name lookups now resolve nickname via NicknameData.resolve() 2026-05-12; citizen conversation routing block added 2026-05-13: iterates colony citizens, skips visitors (instanceof IVisitorData) and role-assigned citizens, partial name match with nickname priority, fires LLM via LLMClient.query() with onReply callback, saves exchange to CitizenConversationMemory. Verified in-game 2026-05-13; `isAssigned` call updated 2026-05-13 (session 24) to pass `citizenColony.getID()` — colony already in scope |
 | `TerrainScanner.java` | ✅ Complete | Shared terrain scan utility. `public static String scan(ServerLevel, BlockPos)`. Extracted from ChatInterceptor. Used by both ChatInterceptor and PreColonyScoutTicker. Added 2026-05-10. Village detection updated 2026-05-12: replaced block-scan heuristic (BELL/HAY_BLOCK/etc.) with `ServerLevel.findNearestMapStructure(StructureTags.VILLAGE, center, 19, false)` (~300-block radius); label now includes compass direction and approximate distance e.g. "village to the northeast (~84 blocks)" via private `compassDir(dx, dz)` helper (8-point). Structures label suppressed when village found. |
 | `PreColonyScoutTicker.java` | ✅ Complete | Proactive PRE_COLONY scouting observations. 1200-tick interval. Guards: PRE_COLONY state, not flying, moved ≥64 blocks in X or Z, BookAdvisorEntity within 64 blocks. Calls TerrainScanner.scan(), builds custom system prompt, fires async LLM via LLMClient.query(). 1-in-7 dry humor directive. Updates lastObservedPos per player. Added 2026-05-10. Village proximity check added 2026-05-12: independent `findNearestMapStructure` call (150-block radius), distance rounded to nearest 50 blocks, 8-point compass direction — injects iron golem hostility and pillager raid escalation warning into LLM context. System prompt updated to include "village proximity and colony placement risk". `lastObservedPos.put()` moved earlier (before LLM fire) to prevent double-fire on slow responses. |
-| `Config.java` | ✅ Complete | NeoForge ModConfigSpec. See Config section below. ADVISOR_COMMUTE_THRESHOLD, ADVISOR_HAPPINESS_THRESHOLD_RED, ADVISOR_HAPPINESS_THRESHOLD_YELLOW added 2026-05-07. |
+| `Config.java` | ✅ Complete | NeoForge ModConfigSpec. See Config section below. ADVISOR_COMMUTE_THRESHOLD, ADVISOR_HAPPINESS_THRESHOLD_RED, ADVISOR_HAPPINESS_THRESHOLD_YELLOW added 2026-05-07. ADVISOR_ROOTCAUSE_SUPPRESS_DAYS (int, default 2, range 0–30) added 2026-05-17 (session 28). |
 | `ConversationMemory.java` | ✅ Complete | Per-NPC conversation history |
-| `DragonTweaks.java` | ✅ Complete | Main mod class, event bus registration — LevelEvent.Load handler added 2026-05-01; MineColonies CitizenDiedModEvent and BuildingConstructionModEvent handlers added 2026-05-05, guarded by ModList.isLoaded check; CitizenInteractDetector registered 2026-05-06; ColonyCreatedModEvent, ColonyDeletedModEvent, advisor citizen-lost logic added 2026-05-08; registerServerPackets() added 2026-05-08 to register RoleSelectionPacket playToServer handler; CitizenDiedModEvent now calls NicknameData.removeNickname() 2026-05-12; CitizenDiedModEvent now also calls CitizenConversationMemory.clearHistory() 2026-05-13 |
+| `DragonTweaks.java` | ✅ Complete | Main mod class, event bus registration — LevelEvent.Load handler added 2026-05-01; MineColonies CitizenDiedModEvent and BuildingConstructionModEvent handlers added 2026-05-05, guarded by ModList.isLoaded check; CitizenInteractDetector registered 2026-05-06; ColonyCreatedModEvent, ColonyDeletedModEvent, advisor citizen-lost logic added 2026-05-08; registerServerPackets() added 2026-05-08 to register RoleSelectionPacket playToServer handler; CitizenDiedModEvent now calls NicknameData.removeNickname() 2026-05-12; CitizenDiedModEvent now also calls CitizenConversationMemory.clearHistory() 2026-05-13; TODO comment added 2026-05-17 for RaidStartedEvent invalidation — stub not found in docs/stubs/, implementation pending |
 | `NicknameData.java` | ✅ Complete | SavedData on overworld, key "dragontweaks_nicknames". Map<String,String> keyed by "colonyId:citizenId". setNickname/getNickname/removeNickname/resolve(). Added 2026-05-12 |
 | `DragonTweaksClient.java` | ✅ Complete | Client-only setup. Packet handler registration moved here (session 9): `registerPackets()` added to constructor, registers both panel packet handlers via `ClientPanelHandler`; RoleAssignmentPayload handler added inline (session 15). |
 | `DragonTweaksClientEvents.java` | ✅ Complete | Client event bus subscriber |
@@ -96,8 +96,8 @@ All source files are in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `AdvisorState.java` | ✅ Complete | Enum: DORMANT, PRE_COLONY, COLONY_NO_CITIZEN, COLONY_WITH_CITIZEN. Added 2026-05-08. |
 | `AdvisorStateData.java` | ✅ Complete | SavedData. Per-player map keyed by UUID. Fields: advisorState, buildToolTriggerFired, assignedCitizenId (nullable), advisorEntityUUID (nullable). Attached to overworld, key "dragontweaks_advisor_state". Added 2026-05-08. |
 | `AdvisorHotbarWatcher.java` | ✅ Complete | `PlayerTickEvent.Post` listener on NeoForge.EVENT_BUS. Server-side only. DORMANT state only — returns immediately in any other state. Scans hotbar slots 0–8 for `structurize:sceptergold` via `BuiltInRegistries.ITEM.getKey()`. On first detection: sets buildToolTriggerFired, transitions state to PRE_COLONY, spawns one BookAdvisorEntity in player's current level, stores entity UUID in AdvisorStateData. AdvisorStateData read/written from overworld SavedData. Added 2026-05-08. |
-| `AdvisorThrottleData.java` | ✅ Complete | SavedData. Stores fired throttle keys as Set<String>. Keys: `"{colonyId}:{citizenId}:{colonyDay}"` (citizen) or `"{colonyId}:systemic:{pattern}:{colonyDay}"`. Attached to overworld level. Added 2026-05-07. |
-| `AdvisorDiagnosticLoop.java` | ✅ Complete | Tick-driven Observe→Diagnose loop. 600-tick interval + dirty flag per colony. Async via CompletableFuture. Throttle check + player delivery on main thread via server.execute(). LLM fired via LLMClient.observe(). Added 2026-05-07. |
+| `AdvisorThrottleData.java` | ✅ Complete | SavedData on overworld. Two Map<String,Integer> maps: `firedKeys` (daily throttle, key→colonyDay) and `suppressedKeys` (root cause suppression, suppressionKey→colonyDay). API: `hasFiredToday(key, colonyDay)`, `markFiredToday(key, colonyDay)` (prunes stale entries), `getSuppressedSinceDay(key)`, `recordSuppression(key, colonyDay)`, `clearSuppression(key)`. Old Set<String> NBT format silently discarded on load. Added 2026-05-07. Rewritten 2026-05-17 (session 28) per advisor_branching_spec_v0_2.md Section 8. |
+| `AdvisorDiagnosticLoop.java` | ✅ Complete | Tick-driven Observe→Diagnose loop. 600-tick interval + dirty flag per colony. Async via CompletableFuture. Multi-citizen branching: pre-scan up to 5 flagged citizens (red-first sort), select top 2, per-citizen root cause suppression + daily throttle check on main thread via server.execute() (one block per citizen). Systemic fires independently. buildCitizenPrompt(report, CitizenRecord) derives worst factor from per-citizen HappinessFactor list. Throttle keys use citizenName (CitizenRecord has no numeric ID). Added 2026-05-07. Branching logic rewritten 2026-05-17 (session 28) per advisor_branching_spec_v0_2.md. |
 | `AdvisorPanelPayload.java` | ✅ Complete | Server-side data preparation class. Static `build(IColony)` calls `ColonyDiagnosticCache.getOrGenerate()` and assembles payload: environmental flags, systemic pattern (nullable), colony summary header, citizen list ordered red→yellow→healthy with alpha within tiers. Per-citizen collapsed fields (name, worst factor ID+value, tier severity, additional complaints badge, commute flag) and expanded fields (all 10 canonical factors with value+modifier label, commute distance+threshold). Reads three threshold config keys at runtime. Added 2026-05-07. |
 | `PlannerPanelPayload.java` | ✅ Complete | Server-side data preparation class. Static `build(IColony, String goalInput)`. Snapshot mode (goalInput null): calls ColonyDiagnosticCache, computes WorkerHeader and BedHeader, generates Recommendation list ordered crisis-first then shortest-chain. Goal input mode: calls PlannerDependencyRegistry.findMatches()+getChain(), annotates each ChainStep completed/firstIncomplete, builds CostEstimate (stepsRemaining + research names). Per-step completion verified via BuildingEntry.getRegistryName() matching against BUILDING_HOLDERS map (DeferredHolder.getId()), and ILocalResearchTree.isComplete() for RESEARCH steps. In-progress annotation via claimed BUILD/UPGRADE work orders matched to building types. Materials list empty pending per-building material API verification; getMatchingItemStacksInWarehouse() call pattern documented in TODO comment. Added 2026-05-07. Updated session 9: `isStepComplete()` checks `isAutoSatisfied()` first for BUILDING steps; `generateRecommendations()` skips recommendations for already-built buildings with 0 stepsRemaining (exempt: `residence`, `guard_tower`). |
 | `AdvisorPanelScreen.java` | ✅ Complete | Client-side GUI (`@OnlyIn(Dist.CLIENT)`). Extends `Screen`. Constructor takes `AdvisorPanelPayload`. Renders: environmental warnings banner (conditional, amber), systemic pattern banner (conditional, dark red), colony summary header (happiness + citizen count/housing cap), paginated citizen list (5 items/page, Prev/Close/Next nav buttons). Per-citizen collapsed row: severity dot, expand arrow, name, worst factor+value, +N additional complaints badge, [far] commute flag. Per-citizen expanded section: all 10 canonical factors with value+severity dot+modifier type label, commute line with threshold comparison. Expand/collapse state persists per citizen index until panel closes (cleared in onClose). mouseClicked() tracks accumulated y through expanded rows to correctly hit-test header rows. renderables iterated directly (public final field) after custom content — renderBackground() called once, super.render() not called. All class names verified against NeoForge 1.21.1 sources. Build clean. Added 2026-05-07. |
@@ -133,9 +133,7 @@ Verify exact field names against source before referencing.
 - `ADVISOR_BOUNDARY_DETECTION_RANGE` — int, default 40, range 10–200
 - `ADVISOR_WHISPER_THRESHOLD` — int, default 120, range 40–500
 - `ADVISOR_FORCE_PRIVATE` — boolean, default false
-
-**Does not exist yet — to be added:**
-- *(none — `COMMAND_RADIUS` was eliminated; detection radius and command radius are the same value, read from existing detection config. Do not add a separate COMMAND_RADIUS entry.)*
+- `ADVISOR_ROOTCAUSE_SUPPRESS_DAYS` — int, default 2, range 0–30 — colony days to suppress repeat observations for a citizen with an unchanged root cause
 
 ---
 
@@ -680,6 +678,27 @@ The devchat.md incorrectly listed this file as not existing. It was present and 
 
 - `AssistantEntity.java`: `addAdditionalSaveData` and `readAdditionalSaveData` both correctly implemented against spec.
 - `ConversationMemory.java`: `restoreAll` signature is `Map<String, Deque<String>>`, not `Map<String, List<String>>` as the spec text said. The implementation is self-consistent — `AssistantEntity` builds `Deque` objects and passes them in. This is a doc error, not a code error. No fix needed.
+
+---
+
+## Session Notes — 2026-05-17 (Session 28) — Advisor multi-citizen branching + root cause suppression
+
+Implemented `advisor_branching_spec_v0_2.md` in full (except RaidStartedEvent — stub missing).
+
+**AdvisorThrottleData.java:** Replaced `Set<String> firedKeys` with two `Map<String, Integer>` maps — `firedKeys` (daily throttle) and `suppressedKeys` (root cause suppression). New API: `hasFiredToday`, `markFiredToday`, `getSuppressedSinceDay`, `recordSuppression`, `clearSuppression`. Old NBT format (ListTag) silently discarded on load. Stale daily entries pruned automatically in `markFiredToday`.
+
+**AdvisorDiagnosticLoop.java:** `runCycleAsync` rewritten. Systemic check now fires independently (no longer suppresses per-citizen output). New pre-scan pass over `getCitizens()`: filter to flagged, sort red-first then alpha, cap at 5, take top 2. Per-citizen loop: builds root cause suppression key + daily throttle key + LLM prompt on async thread; each citizen gets its own `server.execute()` block for suppression check → daily check → observe. `buildCitizenPrompt` signature changed to `(report, CitizenRecord)` — worst factor derived from per-citizen `HappinessFactor` list; root cause only available for `targetCitizen`, others get `null` (→ "The cause is unclear.").
+
+**Config.java:** `ADVISOR_ROOTCAUSE_SUPPRESS_DAYS` added (int, default 2, range 0–30).
+
+**DragonTweaks.java:** TODO comment added for `RaidStartedEvent` invalidation trigger (Section 5). Omitted because no stub found in `docs/stubs/`.
+
+**Implementation notes:**
+- `CitizenRecord` has no numeric ID — citizen names used as identifiers in all throttle keys.
+- Root cause suppression key format: `"{colonyId}:{citizenName}:rc{rootCauseOrdinal}"`. Non-targetCitizen citizens get `RootCause.UNKNOWN` ordinal.
+- Spec said suppression check (step 4b) on async thread — moved to main thread inside `server.execute()` for thread safety (read of SavedData must be main thread).
+
+Build clean.
 
 ---
 

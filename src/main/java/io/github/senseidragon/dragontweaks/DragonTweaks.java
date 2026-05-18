@@ -170,6 +170,10 @@ public class DragonTweaks {
                 }
             });
 
+            // TODO: Subscribe to RaidStartedEvent (Section 5 — advisor_branching_spec_v0_2.md)
+            // No stub found in docs/stubs/ — package path unconfirmed. When verified:
+            //   ColonyDiagnosticCache.invalidate(colonyId); AdvisorDiagnosticLoop.markDirty(colonyId);
+
             IMinecoloniesAPI.getInstance().getEventBus().subscribe(ColonyDeletedModEvent.class, e -> {
                 if (LITE_MODE) return;
                 UUID playerUUID = e.getColony().getPermissions().getOwner();

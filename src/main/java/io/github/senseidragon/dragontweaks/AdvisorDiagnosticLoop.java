@@ -11,12 +11,15 @@ import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 public class AdvisorDiagnosticLoop {
 
@@ -77,48 +80,104 @@ public class AdvisorDiagnosticLoop {
 
         int colonyId = colony.getID();
         int colonyDay = colony.getDay();
-        double redThreshold = Config.ADVISOR_HAPPINESS_THRESHOLD_RED.get();
+        int commuteThreshold = Config.ADVISOR_COMMUTE_THRESHOLD.get();
+        int suppressDays = Config.ADVISOR_ROOTCAUSE_SUPPRESS_DAYS.get();
 
-        final String throttleKey;
-        final String whatChanged;
-
+        // Step 1: Systemic — fires independently, does not suppress per-citizen output
         if (report.isSystemicPatternDetected() && report.getSystemicPattern() != null) {
-            throttleKey = colonyId + ":systemic:" + report.getSystemicPattern().name() + ":" + colonyDay;
-            whatChanged = buildSystemicPrompt(report.getSystemicPattern());
-        } else {
-            if (report.getTargetCitizen() == null) return;
-
-            double targetHappiness = report.getCitizens().stream()
-                    .filter(c -> c.getName().equals(report.getTargetCitizen().getName()))
-                    .mapToDouble(ColonyDiagnosticReport.CitizenRecord::getOverallHappiness)
-                    .findFirst()
-                    .orElse(1.0);
-            if (targetHappiness >= redThreshold) return;
-
-            int citizenId = report.getTargetCitizen().getId();
-            throttleKey = colonyId + ":" + citizenId + ":" + colonyDay;
-            whatChanged = buildCitizenPrompt(report);
+            String systemicThrottleKey = colonyId + ":systemic:" + report.getSystemicPattern().name() + ":" + colonyDay;
+            String systemicPrompt = buildSystemicPrompt(report.getSystemicPattern());
+            server.execute(() -> {
+                ServerLevel overworld = server.getLevel(Level.OVERWORLD);
+                if (overworld == null) return;
+                AdvisorThrottleData throttle = AdvisorThrottleData.get(overworld);
+                if (throttle.hasFiredToday(systemicThrottleKey, colonyDay)) return;
+                ServerPlayer target = findPlayerInColony(server, level, colony);
+                if (target == null) return;
+                throttle.markFiredToday(systemicThrottleKey, colonyDay);
+                UUID advisorId = UUID.nameUUIDFromBytes(
+                        ("dragontweaks-advisor-" + colonyId).getBytes(StandardCharsets.UTF_8));
+                String timeOfDay = LLMClient.timeOfDay(level.getDayTime());
+                String weather = LLMClient.weather(level.isRaining(), level.isThundering());
+                LLMClient.observe(server, target, ADVISOR_NAME, ADVISOR_ROLE,
+                        timeOfDay, weather, "the colony", systemicPrompt, advisorId);
+            });
         }
 
-        server.execute(() -> {
-            ServerLevel overworld = server.getLevel(Level.OVERWORLD);
-            if (overworld == null) return;
+        // Step 2: Pre-scan pass — filter flagged citizens, sort red-first then alpha, cap at 5
+        List<ColonyDiagnosticReport.CitizenRecord> candidates = report.getCitizens().stream()
+                .filter(c -> isRedCitizen(c, commuteThreshold) || isYellowCitizen(c, commuteThreshold))
+                .sorted(Comparator.comparingInt((ColonyDiagnosticReport.CitizenRecord c) ->
+                                isRedCitizen(c, commuteThreshold) ? 0 : 1)
+                        .thenComparing(ColonyDiagnosticReport.CitizenRecord::getName))
+                .limit(5)
+                .collect(Collectors.toList());
 
-            AdvisorThrottleData throttle = AdvisorThrottleData.get(overworld);
-            if (throttle.hasFired(throttleKey)) return;
+        // Step 3: Take top 2
+        List<ColonyDiagnosticReport.CitizenRecord> selected = candidates.stream()
+                .limit(2)
+                .collect(Collectors.toList());
 
-            ServerPlayer target = findPlayerInColony(server, level, colony);
-            if (target == null) return;
+        // Step 4: Per-citizen loop — each citizen gets its own server.execute() block
+        // CitizenRecord has no numeric ID; name is used as identifier in throttle keys
+        String targetCitizenName = report.getTargetCitizen() != null ? report.getTargetCitizen().getName() : null;
 
-            throttle.markFired(throttleKey);
+        for (ColonyDiagnosticReport.CitizenRecord citizen : selected) {
+            // 4a: Build suppression key using root cause ordinal
+            ColonyDiagnosticReport.RootCause citizenRootCause =
+                    (targetCitizenName != null && targetCitizenName.equals(citizen.getName()))
+                    ? report.getRootCause()
+                    : ColonyDiagnosticReport.RootCause.UNKNOWN;
+            int rootCauseOrdinal = citizenRootCause != null
+                    ? citizenRootCause.ordinal()
+                    : ColonyDiagnosticReport.RootCause.UNKNOWN.ordinal();
+            String suppressionKey = colonyId + ":" + citizen.getName() + ":rc" + rootCauseOrdinal;
 
-            UUID advisorId = UUID.nameUUIDFromBytes(
-                    ("dragontweaks-advisor-" + colony.getID()).getBytes(StandardCharsets.UTF_8));
-            String timeOfDay = LLMClient.timeOfDay(level.getDayTime());
-            String weather = LLMClient.weather(level.isRaining(), level.isThundering());
-            LLMClient.observe(server, target, ADVISOR_NAME, ADVISOR_ROLE,
-                    timeOfDay, weather, "the colony", whatChanged, advisorId);
-        });
+            // 4c: Daily throttle key (checked on main thread below)
+            String dailyKey = colonyId + ":" + citizen.getName() + ":" + colonyDay;
+
+            // Build LLM prompt on async thread
+            String whatChanged = buildCitizenPrompt(report, citizen);
+
+            server.execute(() -> {
+                ServerLevel overworld = server.getLevel(Level.OVERWORLD);
+                if (overworld == null) return;
+                AdvisorThrottleData throttle = AdvisorThrottleData.get(overworld);
+
+                // 4b: Suppression check
+                int suppressedSince = throttle.getSuppressedSinceDay(suppressionKey);
+                if (suppressedSince >= 0) {
+                    if (colonyDay - suppressedSince < suppressDays) return;
+                    throttle.clearSuppression(suppressionKey);
+                }
+
+                // Daily throttle check
+                if (throttle.hasFiredToday(dailyKey, colonyDay)) return;
+
+                ServerPlayer target = findPlayerInColony(server, level, colony);
+                if (target == null) return;
+
+                throttle.markFiredToday(dailyKey, colonyDay);
+                throttle.recordSuppression(suppressionKey, colonyDay);
+
+                UUID advisorId = UUID.nameUUIDFromBytes(
+                        ("dragontweaks-advisor-" + colonyId).getBytes(StandardCharsets.UTF_8));
+                String timeOfDay = LLMClient.timeOfDay(level.getDayTime());
+                String weather = LLMClient.weather(level.isRaining(), level.isThundering());
+                LLMClient.observe(server, target, ADVISOR_NAME, ADVISOR_ROLE,
+                        timeOfDay, weather, "the colony", whatChanged, advisorId);
+            });
+        }
+    }
+
+    private static boolean isRedCitizen(ColonyDiagnosticReport.CitizenRecord c, int commuteThreshold) {
+        if (c.getCommuteDistance() > commuteThreshold) return true;
+        return c.getHappinessFactors().stream().anyMatch(ColonyDiagnosticReport.HappinessFactor::isRedFlag);
+    }
+
+    private static boolean isYellowCitizen(ColonyDiagnosticReport.CitizenRecord c, int commuteThreshold) {
+        if (isRedCitizen(c, commuteThreshold)) return false;
+        return c.getHappinessFactors().stream().anyMatch(ColonyDiagnosticReport.HappinessFactor::isYellowFlag);
     }
 
     private static ServerPlayer findPlayerInColony(MinecraftServer server, ServerLevel level, IColony colony) {
@@ -145,11 +204,21 @@ public class AdvisorDiagnosticLoop {
         };
     }
 
-    private static String buildCitizenPrompt(ColonyDiagnosticReport report) {
-        String citizenName = report.getTargetCitizen().getName();
-        String factorDesc = describeFactorId(report.getWorstFactor());
-        String causeDesc = describeRootCause(report.getRootCause(), report.isCommuteFlagged());
-        return citizenName + " is the most distressed citizen in the colony. Their biggest problem is "
+    private static String buildCitizenPrompt(ColonyDiagnosticReport report, ColonyDiagnosticReport.CitizenRecord citizen) {
+        String citizenName = citizen.getName();
+        String worstFactorId = citizen.getHappinessFactors().stream()
+                .filter(f -> f.isRedFlag() || f.isYellowFlag())
+                .min(Comparator.comparingDouble(ColonyDiagnosticReport.HappinessFactor::getValue))
+                .map(ColonyDiagnosticReport.HappinessFactor::getFactorId)
+                .orElse(null);
+        String factorDesc = describeFactorId(worstFactorId);
+        boolean commuteFlagged = citizen.getCommuteDistance() > Config.ADVISOR_COMMUTE_THRESHOLD.get();
+        ColonyDiagnosticReport.RootCause cause =
+                (report.getTargetCitizen() != null && report.getTargetCitizen().getName().equals(citizenName))
+                ? report.getRootCause()
+                : null;
+        String causeDesc = describeRootCause(cause, commuteFlagged);
+        return citizenName + " is a distressed citizen in the colony. Their biggest problem is "
                 + factorDesc + ". " + causeDesc
                 + " Tell the player what you think is happening and what they should check.";
     }
