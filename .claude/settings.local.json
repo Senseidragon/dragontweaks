@@ -70,7 +70,10 @@
       "Bash(gzip -dc ./data/dragontweaks_advisor_state.dat)",
       "Bash(grep -E \"[A-Za-z0-9-]{8,}\")",
       "Bash(grep -E '.{4,}')",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(cp \"C:/Users/sense/Desktop/DragonTweaks/docs/CLAUDE.md\" \"C:/Users/sense/Desktop/DragonTweaks/CLAUDE.md\")",
+      "Bash(rm \"C:/Users/sense/Desktop/DragonTweaks/docs/CLAUDE.md\")",
+      "Bash(rm \"C:/Users/sense/Desktop/DragonTweaks/docs/dtdocs.zip\")"
     ]
   }
 }

@@ -1,5 +1,5 @@
 # DragonTweaks — Master Open Questions Log
-*Last updated: 2026-05-17 (session 27)*
+*Last updated: 2026-05-17 (sessions 26 + 27)*
 *Purpose: Single source of truth for all unresolved questions. Check this before starting any design or implementation session.*
 
 ---
@@ -47,6 +47,10 @@
 | R6 | 🔁 | NPC cross-awareness | Revisit Phase 4 |
 | R7 | 🔁 | Shadow entity multiplayer visibility | Test Phase 2 |
 | R8 | 🔁 | Quest system | Parking lot — no timeline |
+| OQ-26-1 | 🔁 | Reasoning token billing rate on OpenRouter | Solve empirically in Phase 2 — fire identical prompt at reasoning vs non-reasoning model, solve for X from response payload |
+| OQ-26-2 | 🔁 | Scout `underground_scan_depth` — finalize value | Currently 10, range 8–12; adjust based on playtest |
+| OQ-26-3 | 🔁 | Phase 2 compliance prompt engineering for Scout | Sound detection, threat inference, and atmospheric language compliance prompts not yet drafted |
+| OQ-26-4 | 🔁 | `model_config.json` Java reader interval | How often does the mod re-read the JSON at runtime? Not yet specified |
 
 ---
 
