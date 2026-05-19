@@ -132,9 +132,6 @@ public class DragonTweaks {
                 int colonyId = e.getColony().getID();
                 ColonyDiagnosticCache.invalidate(colonyId);
                 AdvisorDiagnosticLoop.markDirty(colonyId);
-                if (!LITE_MODE && e.getColony().getWorld() instanceof ServerLevel level) {
-                    handleAdvisorCitizenLost(e.getColony(), e.getCitizen().getId(), level);
-                }
             });
 
             IMinecoloniesAPI.getInstance().getEventBus().subscribe(CitizenAddedModEvent.class, e -> {

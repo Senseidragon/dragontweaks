@@ -1,7 +1,7 @@
 # DragonTweaks — Current Project State
 
 *Ground-truth reference. No session history. Facts only.*
-*Last updated: 2026-05-17 (session 28)*
+*Last updated: 2026-05-19 (session 31)*
 
 ---
 
@@ -27,8 +27,8 @@
 | Provider | OpenRouter |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
 | Client class | `LLMClient.java` — do not rename, do not recreate |
-| Model | `google/gemma-4-26b-a4b-it` |
-| max_tokens | 200 — always |
+| Model | Loaded from `run/model_config.json` → `roles → first role → candidates[0] → model_id`. Fallback: `google/gemma-4-26b-a4b-it` |
+| max_tokens | **200** for flavor NPCs / **750** for all advisory roles. Set via `MAX_RESPONSE_TOKENS` / `ADVISORY_MAX_TOKENS` constants in `LLMClient.java`. |
 | stream | false — always |
 | reasoning | Commented out (incompatible with current model). Not a bug. Re-enable when switching back to gemma. |
 
@@ -42,17 +42,19 @@ All in `src/main/java/io/github/senseidragon/dragontweaks/`.
 
 | File | Status | Purpose |
 |---|---|---|
-| `DragonTweaks.java` | ✅ Complete | Main mod class. Event bus registration, MineColonies handlers, LITE_MODE flag. TODO comment added for `RaidStartedEvent` invalidation (stub not found in `docs/stubs/`). |
+| `DragonTweaks.java` | ✅ Complete | Main mod class. Event bus registration, MineColonies handlers, LITE_MODE flag. `CitizenJobChangedModEvent` handler no longer calls `handleAdvisorCitizenLost` — state transition removed; only `CitizenDiedModEvent` and `/assistant revoke` may trigger COLONY_WITH_CITIZEN → COLONY_NO_CITIZEN. TODO comment for `RaidStartedEvent` invalidation remains (stub not found). |
 | `DragonTweaksClient.java` | ✅ Complete | Client-only setup. Packet registration via `registerPackets()`. |
 | `DragonTweaksClientEvents.java` | ✅ Complete | Client event bus subscriber. |
 | `AssistantEntity.java` | ✅ Complete | Flavor NPC entity. Follow/stop, proximity, role, NBT. Idle wander + LookAtPlayer + greeting system. Wander restriction via `restrictTo()`. |
 | `AssistantCommand.java` | ✅ Complete | `/assistant` command. Subcommands: `revoke <citizenName>`, `nickname <partial> <nickname>`, `advisor`, `planner`. |
+| `AssistantDebugCommand.java` | ✅ Complete | `/assistant debug <table>` command (permission level 2). Dumps MineColonies colony data to a timestamped `.txt` file in the run directory. Tables: `buildings`, `beds`, `happiness`, `research`, `citizens`, `workers`, `workorders`, `jobs`, `registry`, `skills`, `stats`, `visitors`. |
+| `DebugConfig.java` | ✅ Complete | Minimal flag class. `public static final boolean DEBUG_ENABLED = true`. Used to gate debug-only code paths. |
 | `AssistantRenderer.java` | ✅ Complete | Placeholder zombie renderer. |
 | `AssistantRoleRecord.java` | ✅ Complete | Record: `citizenId (int)`, `roleType`, `assignmentTimestamp`, `playerUUID`, `shadowEntityUUID`. |
 | `AssistantPanelCommand.java` | ✅ Complete | Handles `/assistant advisor` and `/assistant planner`. Sends panel packets. |
 | `BookAdvisorEntity.java` | ✅ Complete | Lightweight floating entity. Extends `Entity`. State-aware tick. Glows. NBT: ownerUUID only. |
 | `BookAdvisorRenderer.java` | ✅ Complete | `@OnlyIn(Dist.CLIENT)`. Renders WRITABLE_BOOK in COLONY_WITH_CITIZEN, BOOK otherwise. Y-rotation animation. |
-| `ChatInterceptor.java` | ✅ Complete | Routes player chat to LLM. Multi-NPC addressing, PRE_COLONY and COLONY_NO_CITIZEN advisor routing, citizen conversation routing (non-assigned citizens only). |
+| `ChatInterceptor.java` | ✅ Complete | Routes player chat to LLM. Multi-NPC addressing, PRE_COLONY and COLONY_NO_CITIZEN advisor routing, citizen conversation routing (non-assigned citizens only). BookAdvisor search radius uses `COMMAND_PROXIMITY` (was hardcoded 64 blocks). Null guard on `ba.getOwnerUUID()`. PRE_COLONY prompts corrected — advisor may discuss colony site suitability. Citizen conversation calls pass `MAX_RESPONSE_TOKENS`. COLONY_NO_CITIZEN auto-correction: if state is COLONY_NO_CITIZEN but no colony found, resets to PRE_COLONY on the spot and re-runs BookAdvisor search. BookAdvisor PRE_COLONY prompt now includes 200-block MineColonies hostile entity scan (namespace-based, excludes citizen/visitor/cavalry_horse); DANGER context injected when hostiles found. |
 | `CitizenConversationMemory.java` | ✅ Complete | SavedData on overworld (`"dragontweaks_citizen_memory"`). Map keyed by `"colonyId:citizenId"`. Max 20 entries/citizen FIFO. Cleared on death. |
 | `CitizenInteractDetector.java` | ✅ Complete | `PlayerInteractEvent.EntityInteract` handler. Opens `RoleAssignmentPayload` flow. Passes `citizenData.getColony().getID()` to `isAssigned`. |
 | `ClientPanelHandler.java` | ✅ Complete | `@OnlyIn(Dist.CLIENT)`. Handles `OpenAdvisorPanelPacket` and `OpenPlannerPanelPacket`. |
@@ -62,14 +64,15 @@ All in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `ConversationMemory.java` | ✅ Complete | Per-NPC conversation history. |
 | `EnvLoader.java` | ✅ Complete | Reads `.env` for API key. |
 | `FollowPlayerGoal.java` | ✅ Complete | AI goal for follow behavior. |
-| `LLMClient.java` | ✅ Complete | OpenRouter async HTTP client. `query()` overload accepts `Consumer<String> onReply`. Reasoning block commented out. |
+| `LLMClient.java` | ✅ Complete | OpenRouter async HTTP client. `buildRequestBody` takes `maxTokens` param. Advisory calls (`query(UUID, systemPrompt)` and 7-arg variant) use `ADVISORY_MAX_TOKENS = 750`. Flavor NPC calls (role-based `query`, `observe`) use `MAX_RESPONSE_TOKENS = 200`. `parseResponse` has `isJsonNull()` guards on `choices`, `message`, and `content`. Exception logging includes exception class name. Reasoning block commented out. |
+| `ModelConfigLoader.java` | ✅ Complete | Reads `run/model_config.json` via Gson. Navigates `roles → first role → candidates[0] → model_id`. Full null/missing-field guards at each step. Falls back to `google/gemma-4-26b-a4b-it` on any error. 15-minute cache: result stored in `cachedModel`/`cacheExpiryMs`; fallback paths not cached so the next call retries the file. |
 | `ModEntities.java` | ✅ Complete | `ASSISTANT` and `BOOK_ADVISOR` DeferredHolder registrations. |
 | `NicknameData.java` | ✅ Complete | SavedData on overworld (`"dragontweaks_nicknames"`). Map keyed by `"colonyId:citizenId"`. |
 | `ObservationTicker.java` | ✅ Complete | Proactive NPC observations. 100-tick interval. Greeting trigger, raid poll, event reactions. |
 | `OpenAdvisorPanelPacket.java` | ✅ Complete | Server→client packet carrying `AdvisorPanelPayload`. |
 | `OpenPlannerPanelPacket.java` | ✅ Complete | Server→client packet carrying `PlannerPanelPayload`. |
 | `PlannerDependencyRegistry.java` | ✅ Complete | Singleton. Loads `planner_dependencies.json` at startup. DFS chain resolution. `getChain()`, `findMatches()`, `isAutoSatisfied()`. |
-| `PreColonyScoutTicker.java` | ✅ Complete | 1200-tick proactive scouting in PRE_COLONY state. Village proximity warning injected into LLM context. |
+| `PreColonyScoutTicker.java` | ✅ Complete | 1200-tick proactive scouting in PRE_COLONY state. Village proximity warning injected into LLM context. WARN logs added before query and in callback. Prompt corrected — advisor may discuss colony site suitability. Passes `ADVISORY_MAX_TOKENS`. 200-block MineColonies hostile entity scan (namespace-based, excludes citizen/visitor/cavalry_horse); DANGER context injected when hostiles found. Confirmed detecting 41 camp barbarians at ~50 blocks in live test. |
 | `RoleAssignmentData.java` | ✅ Complete | SavedData. Colony-scoped: `Map<String, AssistantRoleRecord>` keyed by `"colonyId:citizenId"`. All APIs require colonyId. No old integer-key migration. |
 | `RoleAssignmentPayload.java` | ✅ Complete | Server→client packet. Carries citizenName, citizenId, slotsUsed, slotsMax, availableRoles. |
 | `RoleAssignmentScreen.java` | ✅ Complete | `@OnlyIn(Dist.CLIENT)`. Scrollable role list, slot counter, Assign/Cancel. |
@@ -84,7 +87,8 @@ All in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `AdvisorStateData.java` | ✅ Complete | SavedData on overworld (`"dragontweaks_advisor_state"`). Per-player: advisorState, buildToolTriggerFired, assignedCitizenId (nullable), advisorEntityUUID (nullable). |
 | `AdvisorThrottleData.java` | ✅ Complete | Two `Map<String, Integer>` maps: `firedKeys` (daily throttle, key→colonyDay) and `suppressedKeys` (root cause suppression, suppressionKey→colonyDay). API: `hasFiredToday(key, colonyDay)`, `markFiredToday(key, colonyDay)`, `getSuppressedSinceDay(key)`, `recordSuppression(key, colonyDay)`, `clearSuppression(key)`. Old `Set<String>` format detected on load and discarded silently. Stale `firedKeys` entries pruned on `markFiredToday`. Implemented 2026-05-17. |
 | `PlannerPanelPayload.java` | ✅ Complete | Server-side data class. Snapshot + goal-input modes. Recommendation list, cost estimate, chain steps. |
-| `PlannerPanelScreen.java` | ✅ Complete | `@OnlyIn(Dist.CLIENT)`. 324×270 panel. EditBox, snapshot rec list, goal-input chain view. |
+| `BlueprintMaterialsLoader.java` | ✅ Complete | Static utility. `getMaterials(structurePack, blueprintPath, level)` → `Map<String, Integer>`. Reads `config/DragonTweaks/{pack}/{path}{level}.json` via `FMLPaths.GAMEDIR`. Returns empty map on missing file or parse error. |
+| `PlannerPanelScreen.java` | ✅ Complete | `@OnlyIn(Dist.CLIENT)`. 324×270 panel. EditBox, snapshot rec list, goal-input chain view. Browse mode added: Pack → Category → Building → Level selector, each paginated via `ITEMS_PER_PAGE`. `[Browse]` toggle button + `[← Back]` navigation. Level selection calls `BlueprintMaterialsLoader` and displays materials in-panel. |
 
 ---
 
@@ -134,9 +138,15 @@ All in `Config.java`. Verify exact field names against source before referencing
 
 ### Happiness Thresholds
 - Red: factor < 0.5. Yellow: factor 0.5–0.9. Healthy: ≥ 0.9.
+- **⚠️ Scale caveat (OQ-28-1):** These values were defined assuming a 0–1 scale. `IHappinessModifier.getFactor()` uses 1.0 as neutral, can go below 0, and has no upper bound. `social: -1.00` observed in live testing on a fresh colony. Thresholds need design review before Advisor LLM recommendations go live — do not adjust without consulting MineColonies source.
 
 ### Ten Canonical Happiness Factor IDs
 `food`, `slepttonight`, `housing`, `health`, `unemployment`, `idleatjob`, `security`, `school`, `social`, `mystical`
+
+### LLM Token Budget Split (locked 2026-05-19)
+- Flavor NPCs: `MAX_RESPONSE_TOKENS = 200`
+- All advisory roles (PRE_COLONY, COLONY_NO_CITIZEN, COLONY_WITH_CITIZEN): `ADVISORY_MAX_TOKENS = 750`
+- Both constants are `static final` in `LLMClient.java`.
 
 ### LLM Reasoning Block
 - Commented out in `LLMClient.java` as of 2026-05-13. Intentional — current model rejects `effort:none`.
@@ -151,6 +161,25 @@ All in `Config.java`. Verify exact field names against source before referencing
 ### townhall auto_satisfied
 - `planner_dependencies.json` has `"auto_satisfied": true` on townhall entry. Always treated as complete in step chains.
 
+### MineColonies Hostile Entity Detection (locked 2026-05-19)
+- Camp barbarians (`minecolonies:campbarbarian`, `minecolonies:camparcherbarbarian`, etc.) are NOT in `ModTags.raiders` or `ModTags.hostile`.
+- Detection uses namespace scan: any `Mob` whose entity type registry key namespace is `"minecolonies"` and path is not `"citizen"`, `"visitor"`, or `"cavalry_horse"`.
+- Scan radius: 200×128×200 AABB centered on the player.
+- Applied in both `PreColonyScoutTicker` (proactive) and `ChatInterceptor` (direct chat).
+
+### COLONY_NO_CITIZEN Auto-Correction (locked 2026-05-19)
+- `ColonyCreatedModEvent` fires on world load for restored colonies, not only on fresh placement. This can cause a stale PRE_COLONY → COLONY_NO_CITIZEN transition if the advisor state persisted from a prior session.
+- `ChatInterceptor` auto-corrects: if state is `COLONY_NO_CITIZEN` but no colony is found for the player, it resets state to PRE_COLONY on the spot and re-runs the BookAdvisor search — no relog required.
+
+### ModelConfigLoader Cache Interval (locked 2026-05-19)
+- `model_config.json` is re-read at most once every 15 minutes (`CACHE_DURATION_MS = 15 * 60 * 1000L`).
+- Fallback returns (file not found, parse error) are intentionally not cached — the next call retries immediately.
+
+### Advisor State Transition — CitizenJobChangedModEvent (locked 2026-05-19)
+- `CitizenJobChangedModEvent` must NOT trigger COLONY_WITH_CITIZEN → COLONY_NO_CITIZEN.
+- That transition is only valid on `CitizenDiedModEvent` and `/assistant revoke`.
+- A job change does not mean the assigned citizen is lost.
+
 ### Advisor Branching Logic (locked 2026-05-17)
 - Pre-scan: up to 5 flagged citizens per cycle. Sort: red → yellow → alpha within tier.
 - Output: top 2 from candidate list. No tier special-casing.
@@ -161,6 +190,10 @@ All in `Config.java`. Verify exact field names against source before referencing
   - Root cause is only available at report level (for `targetCitizen`). Non-target citizens get `RootCause.UNKNOWN` ordinal.
 - `RaidStartedEvent` invalidation: **TODO only** — stub not found in `docs/stubs/`. Comment added in `DragonTweaks.java`. Implementation pending stub verification.
 - Full spec: `docs/advisor_branching_spec_v0_2.md`.
+
+### Planner Dependency Data (locked 2026-05-17)
+- `planner_dependencies.json` v2 — 45 buildings, all research gates verified from MineColonies source (`civilian.json` + `technology.json` on `release/1.21` branch).
+- Full research unlock reference: `docs/research_unlocks.md` (145 entries, generated from source).
 
 ---
 
@@ -179,6 +212,8 @@ All in `Config.java`. Verify exact field names against source before referencing
 | Item | Location |
 |---|---|
 | MineColonies API stubs | `docs/stubs/` (index: `docs/STUB_INDEX.md`) |
-| Planner dependency data | `src/main/resources/data/dragontweaks/planner_dependencies.json` |
+| Planner dependency data | `src/main/resources/data/dragontweaks/planner_dependencies.json` (v2 — 45 buildings) |
+| Research unlock reference | `docs/research_unlocks.md` (145 entries, sourced from MineColonies `release/1.21`) |
+| Model config | `run/model_config.json` — roles-sectioned format; `ModelConfigLoader` reads `roles → first role → candidates[0]`. Source: scraper pipeline output (`findmodels → test_compliance → rank_models`). |
 | Verification checklist | `dragontweaks_verification_checklist.md` |
 | Advisor branching spec | `docs/advisor_branching_spec_v0_2.md` |

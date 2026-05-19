@@ -1,5 +1,5 @@
 # DragonTweaks — In-Game Verification Checklist & Decision Log
-*Last updated: 2026-05-07*
+*Last updated: 2026-05-19 (session 31)*
 
 Legend: ✅ Verified | ❌ Failed/Bug | ⚠️ Flagged | 🔲 Untested/Assumed | 🚫 Not built yet | 🔁 Deferred
 
@@ -14,6 +14,12 @@ Legend: ✅ Verified | ❌ Failed/Bug | ⚠️ Flagged | 🔲 Untested/Assumed |
 | ✅ | NPC role and playerUUID survive relog | Session 1 — persona intact after relog |
 | ✅ | NPC initiates unprompted environmental commentary on spawn | Session 2 — salmon comment before player spoke |
 | 🔲 | Shadow entity UUID stored and retrieved correctly | Requires physical role test — not yet tested |
+| 🚫 | DragonTweaks.java mod initializes cleanly with all handlers registered | Not yet tested |
+| 🚫 | DragonTweaksClient.java client setup and packet registration complete | Not yet tested |
+| 🚫 | DragonTweaksClientEvents.java client event handlers fire correctly | Not yet tested |
+| 🚫 | AssistantRenderer renders entity correctly in-game | Not yet tested |
+| 🚫 | ModEntities registers ASSISTANT and BOOK_ADVISOR entity types without errors | Not yet tested |
+| 🚫 | Config values load correctly from dragontweaks-common.toml | Not yet tested |
 
 ---
 
@@ -49,6 +55,9 @@ Hardcoding keyword expansion is **explicitly rejected** due to i18n — Japanese
 | 🔁 | NPC uses correct player name consistently | Deferred — see Player Nickname note |
 | ✅ | NPC handles unknown/nonsense words gracefully | Session 1 — "fraggle" deflected in character |
 | ✅ | NPC generates contextually aware environmental commentary | Session 2 — squid/salmon observations fit surroundings |
+| 🚫 | EnvLoader reads API key from .env without errors | Not yet tested |
+| 🚫 | CitizenConversationMemory saves and retrieves entries per citizen | Not yet tested |
+| 🚫 | NicknameData saves and retrieves nicknames per citizen | Not yet tested |
 
 ### LLM as Hard Requirement
 The LLM key is a **hard requirement** for the mod. No key = mod does not run. This eliminates the need for "Hmm..." as a standard acknowledgment.
@@ -113,8 +122,13 @@ Two tiers share the LLM backend but are otherwise entirely separate systems.
 | 🔲 | RoleAssignmentData record survives full JVM restart (write + reload test) | Not yet done — required before proceeding to Step 4 |
 | 🚫 | Role record written on assignment | CitizenInteractDetector built 2026-05-06 — detects interaction and guards correctly. Write path still absent; requires RoleAssignmentScreen (Step 6) to complete. |
 | 🚫 | Slot count enforced per TH level | Requires role assignment GUI |
-| 🔲 | Role revoked on CitizenJobChangedModEvent | Not yet tested |
+| 🔲 | CitizenJobChangedModEvent does NOT revoke advisor role | Architectural decision locked 2026-05-19 — only death and revoke command may trigger state regression |
 | 🔲 | Role slot released on CitizenDiedModEvent | Not yet tested |
+| 🚫 | AssistantRoleRecord stores all fields correctly | Not yet tested |
+| 🚫 | RoleAssignmentPayload carries correct citizen data to client | Not yet tested |
+| 🚫 | RoleAssignmentScreen opens and displays role list correctly | Not yet tested |
+| 🚫 | RolePersona maps role keywords to correct persona blocks | Not yet tested |
+| 🚫 | RoleSelectionPacket transmits role selection to server correctly | Not yet tested |
 
 ---
 
@@ -126,6 +140,8 @@ Two tiers share the LLM backend but are otherwise entirely separate systems.
 | ✅ | `/assistant delete` removes NPC | Works — confirmed in testing |
 | 🚫 | `/assistant revoke <name>` releases citizen role slot | Not yet built — tied to role assignment system, deferred |
 | ✅ | `/assistant locale [code]` manual locale override | Confirmed working in-game 2026-05-05. Locale override fires correctly; `/assistant locale reset` clears override correctly. |
+| 🚫 | `/assistant advisor` opens Advisor panel packet | Not yet tested |
+| 🚫 | `/assistant planner` opens Planner panel packet | Not yet tested |
 
 ---
 
@@ -160,6 +176,47 @@ These are to be completed before the citizen interaction work (Steps 4–7 in de
 > **Note:** Items involving MineColonies citizens (`CitizenJobChangedModEvent`, `CitizenDiedModEvent`, role revocation, slot enforcement) cannot be meaningfully tested until MineColonies integration work begins. These are tracked above for completeness but are not actionable until then.
 
 ---
+
+---
+
+## Advisor System
+
+| Status | Test | Notes |
+|--------|------|-------|
+| ⚠️ | BookAdvisorEntity spawns, persists, and state ticks correctly | Spawn confirmed (renderer active, ownerUUID valid in log, session 30). NBT save/load verified correct in source. Full persist-across-reload test not yet run. |
+| 🚫 | BookAdvisorRenderer displays correct book type per advisor state | Not yet tested |
+| 🚫 | AdvisorState enum transitions fire in correct order | Not yet tested |
+| ⚠️ | AdvisorStateData persists per-player state across sessions | Stale COLONY_NO_CITIZEN state observed (session 31) — caused by ColonyCreatedModEvent firing on world load for restored colonies. Auto-correction added to ChatInterceptor; root state persistence itself not re-verified. |
+| 🚫 | AdvisorHotbarWatcher detects scepter and transitions to PRE_COLONY | Not yet tested |
+| ✅ | PreColonyScoutTicker fires proactive scouting commentary in PRE_COLONY state | Confirmed firing, LLM query dispatched, response received (session 31). Village proximity warning and barbarian camp DANGER context both confirmed in live test. |
+| ✅ | TerrainScanner returns village direction and distance correctly | Confirmed: "village to the west (~632 blocks)" reported correctly in PRE_COLONY scout observation (session 31). |
+| ✅ | MineColonies hostile entity scan detects camp barbarians in PRE_COLONY | Confirmed: 41 camp entities detected at ~50 blocks (session 31). Namespace scan (`"minecolonies"` namespace, excluding citizen/visitor/cavalry_horse) required — `ModTags.raiders` and `ModTags.hostile` do not tag camp variants. |
+| 🚫 | ColonyDiagnosticCache generates and invalidates reports within TTL | Not yet tested |
+| 🚫 | ColonyDiagnosticReportGenerator produces correct per-citizen and systemic data | Not yet tested |
+| 🚫 | AdvisorDiagnosticLoop selects top 2 citizens and fires per-citizen LLM prompts | Not yet tested |
+| 🚫 | AdvisorThrottleData throttles per-citizen per-day and suppresses repeated root causes | Not yet tested |
+| 🚫 | AdvisorPanelPayload assembles from diagnostic cache with correct citizen sort order | Not yet tested |
+| 🚫 | AdvisorPanelScreen opens with correct panel layout and citizen list | Not yet tested |
+| 🚫 | OpenAdvisorPanelPacket received and dispatched by ClientPanelHandler | Not yet tested |
+
+---
+
+## Planner System
+
+| Status | Test | Notes |
+|--------|------|-------|
+| 🚫 | PlannerDependencyRegistry loads planner_dependencies.json at startup without errors | Not yet tested |
+| 🚫 | PlannerPanelPayload assembles snapshot and goal-input modes correctly | Not yet tested |
+| 🚫 | PlannerPanelScreen opens with EditBox and chain view rendering correctly | Not yet tested |
+| 🚫 | PlannerPanelScreen [Browse] button activates browse mode and replaces content area | Not yet tested |
+| 🚫 | Browse mode: pack list populated from config/DragonTweaks/ subdirectories | Not yet tested — requires pack data on disk |
+| 🚫 | Browse mode: drill-down Pack → Category → Building → Level selector navigates correctly | Not yet tested |
+| 🚫 | Browse mode: [← Back] returns to previous level at each drill depth | Not yet tested |
+| 🚫 | Browse mode: level selector calls BlueprintMaterialsLoader and renders materials list | Not yet tested |
+| 🚫 | BlueprintMaterialsLoader.getMaterials() reads correct JSON path and returns correct map | Not yet tested — requires JSON files on disk |
+| 🚫 | BlueprintMaterialsLoader returns empty map and logs warning on missing file | Not yet tested |
+| 🚫 | Browse mode pagination uses ITEMS_PER_PAGE and prev/next controls work independently of snapshot/goal-input pages | Not yet tested |
+| 🚫 | OpenPlannerPanelPacket received and dispatched by ClientPanelHandler | Not yet tested |
 
 ---
 

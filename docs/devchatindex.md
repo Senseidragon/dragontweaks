@@ -27,8 +27,11 @@
 | Spec for advisor diagnostic logic | `docs/advisor_diagnostic_logic_spec_v0_1.md` |
 | Advisor multi-citizen branching, throttle suppression, root cause suppression logic | `docs/advisor_branching_spec_v0_2.md` |
 | Advisor LLM prompt wording, response ranking, evaluation harness prompts, or model behavior tests | `docs/advisor_prompt_engineering_spec_v0_2.md` — Do not use as proof that data is currently available in code. Verify current implementation in `docs/panels_and_diagnostics.md` and source first. |
-| Spec for planner panel UI | `docs/planner_panel_spec_v0_3.md` |
+| Advisor role design rationale — why persistent state memory is the core requirement | `docs/advisor_lessons_learned_v4.md` |
+| Spec for planner panel UI | `docs/planner_panel_spec_v0_4.md` |
 | Spec for planner dependency data | `docs/planner_dependency_data_spec_v0_1.md` |
+| Citizen role schema — field definitions and custom role authoring guide for `citizen-roles.json` | `docs/citizen-roles-schema.md` |
+| Citizen role definitions — current role configs for Advisor, Planner, Scout, Ranch Hand | `docs/citizen-roles.json` (scraper input/output; not loaded by the mod at runtime) |
 | Open design questions | `docs/open_questions_log.md` |
 | Full original design intent | `docs/assistantmod_designdoc_v0_3.md` |
 | **Why we made a past decision** | `docs/session_history.md` |
@@ -44,9 +47,10 @@
 
 ## After Completing Any Task
 
-Update `docs/devchat.md`:
-- Set `Last updated` date at the top
-- Update the file table (`What Exists Right Now`) for any files added/changed
-- Add a session note under `Session Notes`
+Update the following docs:
+- `docs/current_state.md` — update file status table and any newly locked decisions
+- `docs/session_log.md` — append a new session entry (most recent at top)
+- `docs/dragontweaks_verification_checklist.md` — if `./gradlew build` passed
+- `docs/open_questions_log.md` — if any questions were resolved or new ones opened
 
-Also update `dragontweaks_verification_checklist.md` if `./gradlew build` passed.
+Do **not** update `docs/devchat.md` — it is archive only.

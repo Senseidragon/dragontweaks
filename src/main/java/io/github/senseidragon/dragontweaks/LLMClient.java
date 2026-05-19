@@ -32,6 +32,9 @@ public class LLMClient {
     private static volatile ExecutorService EXECUTOR = newExecutor();
     private static volatile HttpClient HTTP = newHttpClient(EXECUTOR);
 
+    static final int MAX_RESPONSE_TOKENS = 200;
+    static final int ADVISORY_MAX_TOKENS = 750;
+
     private static ExecutorService newExecutor() {
         return Executors.newSingleThreadExecutor(r -> new Thread(r, "dragontweaks-llm"));
     }
@@ -57,7 +60,6 @@ public class LLMClient {
     }
 
     private static final Gson GSON = new Gson();
-    private static final int MAX_RESPONSE_TOKENS = 200;
 
     private static String buildSystemPrompt(String npcName, String role, String playerName,
                                              String timeOfDay, String weather, String surroundings) {
@@ -127,19 +129,29 @@ public class LLMClient {
     static String parseResponse(String json) {
         JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
         try {
-            var choices = obj.get("choices").getAsJsonArray();
+            var choicesEl = obj.get("choices");
+            if (choicesEl == null || choicesEl.isJsonNull()) {
+                throw new IllegalArgumentException("Missing choices in response: " + json);
+            }
+            JsonArray choices = choicesEl.getAsJsonArray();
             if (choices.size() == 0) {
                 throw new IllegalArgumentException("Empty choices array: " + json);
             }
-            return choices.get(0).getAsJsonObject()
-                .get("message").getAsJsonObject()
-                .get("content").getAsString();
+            var messageEl = choices.get(0).getAsJsonObject().get("message");
+            if (messageEl == null || messageEl.isJsonNull()) {
+                throw new IllegalArgumentException("Missing message in choice: " + json);
+            }
+            var contentEl = messageEl.getAsJsonObject().get("content");
+            if (contentEl == null || contentEl.isJsonNull()) {
+                throw new IllegalArgumentException("Null content in message: " + json);
+            }
+            return contentEl.getAsString();
         } catch (NullPointerException | IllegalStateException e) {
             throw new IllegalArgumentException("Unexpected OpenRouter response: " + json, e);
         }
     }
 
-    private static String buildRequestBody(String model, String userContent, String systemPrompt) {
+    private static String buildRequestBody(String model, String userContent, String systemPrompt, int maxTokens) {
         JsonObject obj = new JsonObject();
         obj.addProperty("model", model);
 
@@ -156,7 +168,7 @@ public class LLMClient {
         messages.add(userMsg);
 
         obj.add("messages", messages);
-        obj.addProperty("max_tokens", MAX_RESPONSE_TOKENS);
+        obj.addProperty("max_tokens", maxTokens);
         obj.addProperty("stream", false);
         // TODO: re-enable when switching back to a model that supports effort:none (e.g. google/gemma-4-26b-a4b-it)
         // JsonObject reasoning = new JsonObject();
@@ -172,9 +184,10 @@ public class LLMClient {
         );
     }
 
+    // Advisory query with callback — maxTokens lets callers specify budget.
     public static void query(MinecraftServer server, ServerPlayer player,
                              Component entityName, String message,
-                             UUID npcId, String systemPrompt,
+                             UUID npcId, String systemPrompt, int maxTokens,
                              Consumer<String> onReply) {
         if (!Config.LLM_ENABLED.get()) {
             server.execute(() -> sendFallback(player, entityName));
@@ -195,7 +208,7 @@ public class LLMClient {
         String userContent = history.isEmpty()
             ? playerName + " says: " + message
             : "[Prior conversation:]\n" + history + "\n\n" + playerName + " says: " + message;
-        String requestBody = buildRequestBody(ModelConfigLoader.getModel(), userContent, systemPrompt);
+        String requestBody = buildRequestBody(ModelConfigLoader.getModel(), userContent, systemPrompt, maxTokens);
 
         HttpRequest request;
         try {
@@ -219,7 +232,7 @@ public class LLMClient {
                     if (onReply != null) onReply.accept(reply);
                 }))
                 .exceptionally(ex -> {
-                    DragonTweaks.LOGGER.warn("[LLMClient] LLM request failed: {}", ex.getMessage());
+                    DragonTweaks.LOGGER.warn("[LLMClient] LLM request failed [{}]: {}", ex.getClass().getSimpleName(), ex.getMessage());
                     server.execute(() -> sendFallback(player, entityName));
                     return null;
                 });
@@ -255,7 +268,6 @@ public class LLMClient {
         if (target == null) return;
 
         Component nameComponent = npc.getCustomName() != null ? npc.getCustomName() : Component.literal("Assistant");
-        // Fix 3: pass npcId so the response is stored in ConversationMemory
         observe(server, target, nameComponent, npc.getRole(),
                 timeOfDay(level.getDayTime()), weather(level.isRaining(), level.isThundering()),
                 scanSurroundings(level, npc), tierPrompt, npcId);
@@ -280,7 +292,7 @@ public class LLMClient {
                 + "Always respond in the language identified by locale code: " + locale + ".\n";
         String userContent = "You just noticed: " + whatChanged +
                              ". React in character in 1-2 short sentences. Address " + playerName + " directly.";
-        String requestBody = buildRequestBody(ModelConfigLoader.getModel(), userContent, systemPrompt);
+        String requestBody = buildRequestBody(ModelConfigLoader.getModel(), userContent, systemPrompt, MAX_RESPONSE_TOKENS);
 
         HttpRequest request;
         try {
@@ -297,16 +309,16 @@ public class LLMClient {
                 player.sendSystemMessage(
                     Component.literal("[").append(entityName).append("]: " + reply)
                 );
-                // Fix 3: store observation in conversation history so Hugo can reference it later
                 ConversationMemory.addExchange(npcId, playerName,
                     "[observation]: " + whatChanged, npcName + ": " + reply);
             }))
             .exceptionally(ex -> {
-                DragonTweaks.LOGGER.warn("[LLMClient] Observation request failed: {}", ex.getMessage());
+                DragonTweaks.LOGGER.warn("[LLMClient] Observation request failed [{}]: {}", ex.getClass().getSimpleName(), ex.getMessage());
                 return null;
             });
     }
 
+    // Flavor NPC query — uses role-based system prompt and flavor token budget.
     public static void query(MinecraftServer server, ServerPlayer player,
                              Component entityName, String message, String role,
                              String timeOfDay, String weather, String surroundings,
@@ -320,9 +332,10 @@ public class LLMClient {
         String locale = AssistantCommand.localeOverride != null ? AssistantCommand.localeOverride : "en_us";
         String systemPrompt = buildSystemPrompt(npcName, role, playerName, timeOfDay, weather, surroundings)
                 + "Always respond in the language identified by locale code: " + locale + ".\n";
-        queryWithPrompt(server, player, entityName, message, npcId, systemPrompt);
+        queryWithPrompt(server, player, entityName, message, npcId, systemPrompt, MAX_RESPONSE_TOKENS);
     }
 
+    // Advisory query without callback — always uses ADVISORY_MAX_TOKENS.
     public static void query(MinecraftServer server, ServerPlayer player,
                              Component entityName, String message,
                              UUID npcId, String systemPrompt) {
@@ -330,12 +343,12 @@ public class LLMClient {
             server.execute(() -> sendFallback(player, entityName));
             return;
         }
-        queryWithPrompt(server, player, entityName, message, npcId, systemPrompt);
+        queryWithPrompt(server, player, entityName, message, npcId, systemPrompt, ADVISORY_MAX_TOKENS);
     }
 
     private static void queryWithPrompt(MinecraftServer server, ServerPlayer player,
                                         Component entityName, String message,
-                                        UUID npcId, String systemPrompt) {
+                                        UUID npcId, String systemPrompt, int maxTokens) {
         ensureAlive();
 
         String apiKey = EnvLoader.get("OPENROUTER_API_KEY");
@@ -351,7 +364,7 @@ public class LLMClient {
         String userContent = history.isEmpty()
             ? playerName + " says: " + message
             : "[Prior conversation:]\n" + history + "\n\n" + playerName + " says: " + message;
-        String requestBody = buildRequestBody(ModelConfigLoader.getModel(), userContent, systemPrompt);
+        String requestBody = buildRequestBody(ModelConfigLoader.getModel(), userContent, systemPrompt, maxTokens);
 
         HttpRequest request;
         try {
@@ -374,7 +387,7 @@ public class LLMClient {
                         playerName + ": " + message, npcName + ": " + reply);
                 }))
                 .exceptionally(ex -> {
-                    DragonTweaks.LOGGER.warn("[LLMClient] LLM request failed: {}", ex.getMessage());
+                    DragonTweaks.LOGGER.warn("[LLMClient] LLM request failed [{}]: {}", ex.getClass().getSimpleName(), ex.getMessage());
                     server.execute(() -> sendFallback(player, entityName));
                     return null;
                 });

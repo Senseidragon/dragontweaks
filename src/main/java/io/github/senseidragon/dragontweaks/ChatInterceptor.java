@@ -4,10 +4,13 @@ import com.minecolonies.api.colony.ICitizenData;
 import com.minecolonies.api.colony.IColony;
 import com.minecolonies.api.colony.IColonyManager;
 import com.minecolonies.api.colony.IVisitorData;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.event.ServerChatEvent;
@@ -32,9 +35,11 @@ public class ChatInterceptor {
             earlyState = AdvisorStateData.get(serverLevel.getServer().overworld()).getState(player.getUUID());
             DragonTweaks.LOGGER.debug("[ChatInterceptor] player={} advisorState={}", player.getGameProfile().getName(), earlyState);
             if (earlyState == AdvisorState.PRE_COLONY || earlyState == AdvisorState.DORMANT) {
-                AABB bookBox = AABB.ofSize(player.position(), 64, 64, 64);
+                double bookRange = Config.COMMAND_PROXIMITY.get() * 2;
+                AABB bookBox = AABB.ofSize(player.position(), bookRange, bookRange, bookRange);
                 for (BookAdvisorEntity ba : serverLevel.getEntitiesOfClass(BookAdvisorEntity.class, bookBox)) {
-                    if (player.getUUID().equals(ba.getOwnerUUID())) {
+                    UUID baOwner = ba.getOwnerUUID();
+                    if (baOwner != null && player.getUUID().equals(baOwner)) {
                         bookAdvisor = ba;
                         break;
                     }
@@ -149,9 +154,25 @@ public class ChatInterceptor {
             }
         }
 
-        DragonTweaks.LOGGER.info("[ChatInterceptor] COLONY_NO_CITIZEN: colonyNoColony={}, colonyNoBookAdvisor={}",
-            colonyNoColony != null ? "found" : "null",
-            colonyNoBookAdvisor != null ? "found" : "null");
+        // Auto-correct stale COLONY_NO_CITIZEN when no colony exists for this player
+        if (!DragonTweaks.LITE_MODE && advisorState == AdvisorState.COLONY_NO_CITIZEN && colonyNoColony == null) {
+            DragonTweaks.LOGGER.warn("[ChatInterceptor] COLONY_NO_CITIZEN state but no colony found — resetting to PRE_COLONY for player={}",
+                    player.getGameProfile().getName());
+            AdvisorStateData.get(player.getServer().overworld()).setState(player.getUUID(), AdvisorState.PRE_COLONY);
+            advisorState = AdvisorState.PRE_COLONY;
+            // Re-run BookAdvisor search now that state is corrected
+            if (bookAdvisor == null) {
+                double bookRange = Config.COMMAND_PROXIMITY.get() * 2;
+                AABB bookBox2 = AABB.ofSize(player.position(), bookRange, bookRange, bookRange);
+                for (BookAdvisorEntity ba : serverLevel.getEntitiesOfClass(BookAdvisorEntity.class, bookBox2)) {
+                    UUID baOwner = ba.getOwnerUUID();
+                    if (baOwner != null && player.getUUID().equals(baOwner)) {
+                        bookAdvisor = ba;
+                        break;
+                    }
+                }
+            }
+        }
 
         // COLONY_WITH_CITIZEN: BookAdvisorEntity search
         BookAdvisorEntity colonyWithBookAdvisor = null;
@@ -284,11 +305,10 @@ public class ChatInterceptor {
                     RolePersona.getPersonaBlock("advisor") + "\n" +
                     "You are standing in a " + biomeName + " biome. Time of day: " + timeOfDay + ". Weather: " + weather + ".\n" +
                     "Nearby: " + surroundings + ".\n" +
-                    "Speak ONLY about terrain, biome, water proximity, elevation, forest coverage, and defensibility. " +
-                    "Never mention colonies, citizens, buildings, happiness, or workers. " +
+                    "Speak candidly about this location's suitability as a colony site. Assess terrain, biome, water proximity, elevation, forest coverage, and defensibility. " +
                     "Never reference \"the game\", \"players\", or anything that breaks immersion.\n" +
                     "The person speaking to you is " + playerName + ".\n" +
-                    "Respond in 1 short sentence under 100 characters. Never break character. Never say you are an AI.";
+                    "Respond in 1-2 sentences. Never break character. Never say you are an AI.";
                 LLMClient.query(server, player, entityName, rawMessage, target.getUUID(), scopedPrompt);
             } else {
                 LLMClient.query(server, player, entityName, rawMessage, target.getRole(), timeOfDay, weather, surroundings, target.getUUID());
@@ -297,22 +317,33 @@ public class ChatInterceptor {
 
         if (bookAdvisor != null) {
             Component bookName = Component.literal("Advisor");
-            String surroundings = "nothing notable nearby";
             String terrainLabels = TerrainScanner.scan(serverLevel, player.blockPosition());
+            AABB hostileBox = AABB.ofSize(player.position(), 200, 128, 200);
+            List<Mob> nearbyHostiles = serverLevel.getEntitiesOfClass(Mob.class, hostileBox, e -> {
+                ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(e.getType());
+                if (id == null || !"minecolonies".equals(id.getNamespace())) return false;
+                String path = id.getPath();
+                return !path.equals("citizen") && !path.equals("visitor") && !path.equals("cavalry_horse");
+            });
+            String hostileContext = nearbyHostiles.isEmpty() ? "" :
+                "DANGER: " + nearbyHostiles.size() + " hostile MineColonies " +
+                (nearbyHostiles.size() == 1 ? "entity" : "entities") + " (barbarian or outpost type) " +
+                (nearbyHostiles.size() == 1 ? "is" : "are") + " within 100 blocks. " +
+                "There is almost certainly a barbarian encampment or outpost nearby. " +
+                "Strongly warn " + player.getGameProfile().getName() + " — settling here would invite immediate raids.\n";
             String playerName = player.getGameProfile().getName();
             String scopedPrompt =
                 "You are Advisor, an advisor helping scout a settlement location.\n" +
                 RolePersona.getPersonaBlock("advisor") + "\n" +
                 "You are at depth Y=" + player.getBlockY() + " in a " + biomeName + " biome. Time of day: " + timeOfDay + ". Weather: " + weather + ".\n" +
-                "Nearby: " + surroundings + ".\n" +
                 "Nearby terrain: " + terrainLabels + ".\n" +
+                hostileContext +
                 "The terrain labels above are ground truth observed facts. Never contradict them regardless of biome or weather.\n" +
                 "Label key: 'structures' means man-made construction (planks, stone bricks, torches, etc.) is nearby — likely ruins or an abandoned build. 'village' means a vanilla village is nearby (bell, smoker, lectern, etc.).\n" +
-                "Speak ONLY about terrain, biome, water proximity, elevation, forest coverage, and defensibility. " +
-                "Never mention colonies, citizens, buildings, happiness, or workers. " +
+                "Speak candidly about this location's suitability as a colony site. Assess terrain, biome, water proximity, elevation, forest coverage, and defensibility. " +
                 "Never reference \"the game\", \"players\", or anything that breaks immersion.\n" +
                 "The person speaking to you is " + playerName + ".\n" +
-                "Respond in 1 short sentence under 100 characters. Never break character. Never say you are an AI.";
+                "Respond in 1-2 sentences. Never break character. Never say you are an AI.";
             DragonTweaks.LOGGER.debug("[DragonTweaks] PRE_COLONY prompt for {} at {}:\nTERRAIN: {}\nPROMPT: {}",
                 playerName, player.blockPosition(), terrainLabels, scopedPrompt);
             LLMClient.query(server, player, bookName, rawMessage, bookAdvisor.getUUID(), scopedPrompt);
@@ -426,7 +457,7 @@ public class ChatInterceptor {
             UUID citizenNpcId = UUID.nameUUIDFromBytes(
                 ("citizen:" + fColonyId + ":" + fCitizenId).getBytes(java.nio.charset.StandardCharsets.UTF_8));
             LLMClient.query(server, player, Component.literal(fDisplayName), rawMessage,
-                citizenNpcId, systemPrompt,
+                citizenNpcId, systemPrompt, LLMClient.MAX_RESPONSE_TOKENS,
                 reply -> {
                     citizenMemory.appendHistory(fColonyId, fCitizenId, playerName, rawMessage);
                     citizenMemory.appendHistory(fColonyId, fCitizenId, fDisplayName, reply);

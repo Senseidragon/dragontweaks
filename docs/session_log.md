@@ -26,6 +26,124 @@
 
 ---
 
+## 2026-05-19 — Session 31
+
+**Focus:** ModelConfigLoader cache, hostile entity detection, stale state auto-correction.
+
+**Work completed:**
+- Completed `ModelConfigLoader` 15-minute cache — `cachedModel` and `cacheExpiryMs` now populated after successful parse. Fallback paths intentionally not cached.
+- Added MineColonies hostile entity scan to `PreColonyScoutTicker` — namespace-based (`"minecolonies"` namespace, excluding citizen/visitor/cavalry_horse). Confirmed 41 camp barbarians detected at ~50 blocks in live test. Previous tag-based approach (`ModTags.raiders`, `ModTags.hostile`) failed — camp entity variants are in neither tag.
+- Added same hostile entity scan to `ChatInterceptor` bookAdvisor PRE_COLONY prompt path — replaced hardcoded `"nothing notable nearby"` with live 200-block scan. DANGER context now injected into direct chat responses when hostiles are present.
+- Added COLONY_NO_CITIZEN auto-correction to `ChatInterceptor` — if state is COLONY_NO_CITIZEN but no colony exists for the player, resets to PRE_COLONY on the spot and re-runs BookAdvisor search. Root cause: `ColonyCreatedModEvent` fires on world load for restored colonies, causing stale transition.
+- Fixed `entityies` typo in plural hostile count string in both files.
+
+**Decisions made:**
+- Camp barbarian detection must use MineColonies namespace scan, not `ModTags.raiders` or `ModTags.hostile` — neither tag covers camp-dwelling variants. Locked.
+- COLONY_NO_CITIZEN auto-correction is the canonical fix for stale state. No startup scan needed — correction fires lazily on first chat.
+- ModelConfigLoader cache interval: 15 minutes. Fallbacks not cached.
+
+**Deferred / carry-forward:**
+- OQ-30-1: `openai/gpt-oss-120b` is still first candidate in `model_config.json` — reasoning model may still exhaust token budget. Fix requires manually reordering candidates or adding `reasoning_excluded` filtering.
+- WARN logs in `PreColonyScoutTicker` should be downgraded to DEBUG once pipeline is confirmed stable.
+- Flying guard (`player.getAbilities().flying`) blocks PRE_COLONY observations in creative mode — noted, not yet addressed.
+
+**Build status:** PASS
+
+---
+
+## 2026-05-19 — Session 30
+
+**Focus:** PRE_COLONY advisor LLM connectivity — diagnosis, fixes, model config overhaul.
+
+**Work completed:**
+- Diagnosed silent LLM failure chain: `BookAdvisorEntity.getOwnerUUID()` null after reload → ChatInterceptor early-exit → no query fired. Added null guard on `ba.getOwnerUUID()` in ChatInterceptor BookAdvisor search.
+- Unified BookAdvisor search radius to `Config.COMMAND_PROXIMITY` (was hardcoded 64 blocks, now consistent with AssistantEntity candidate radius).
+- Removed `handleAdvisorCitizenLost()` call from `CitizenJobChangedModEvent` handler in `DragonTweaks.java`. Job changes must not trigger COLONY_WITH_CITIZEN → COLONY_NO_CITIZEN — only `CitizenDiedModEvent` and revoke command may do so.
+- Added WARN-level logs in `PreColonyScoutTicker` before LLM query and in callback to expose whether the query fires and whether the response arrives.
+- Improved `LLMClient` exception logging to include exception class name alongside message (TimeoutException previously logged as "null").
+- Added `isJsonNull()` guards in `parseResponse()` for `choices`, `message`, and `content` fields. Diagnosed root cause: `openai/gpt-oss-120b` (a reasoning model) was being selected from `model_config.json`, spending all tokens on reasoning and returning `content: null`.
+- Rewrote `ModelConfigLoader.java` to parse the roles-sectioned `model_config.json` format (`roles → first role → candidates[0] → model_id`) using Gson with full null guards. Old string-scan parser discarded.
+- Moved `model_config.json` from project root to `run/` (where `ModelConfigLoader` reads it at runtime).
+- Split `max_tokens`: advisory roles → `ADVISORY_MAX_TOKENS = 750`; flavor NPCs → `MAX_RESPONSE_TOKENS = 200`. Threaded `maxTokens` through `buildRequestBody` and `queryWithPrompt`.
+- Corrected PRE_COLONY advisor prompts in `PreColonyScoutTicker` and `ChatInterceptor` — removed contradictory "never mention colonies" restriction. Advisor is explicitly scouting colony sites; this is the role's core domain.
+
+**Decisions made:**
+- Advisory token budget is 750. Flavor NPC budget stays 200. Split is permanent — any advisory role that can't get good advice within 750 tokens needs the budget raised, not capped.
+- `CitizenJobChangedModEvent` explicitly must not trigger state regression. Job reassignment is not citizen loss.
+- PRE_COLONY advisor has full permission to discuss colony site suitability, village proximity risk, and settlement defensibility.
+- `model_config.json` lives in `run/` and is in the scraper's roles-sectioned format. `ModelConfigLoader` now understands this format.
+
+**Deferred / carry-forward:**
+- `model_config.json` first candidate (`openai/gpt-oss-120b`) is a reasoning model. Even at 750 tokens it may exhaust budget on reasoning before producing content. Need to either: (a) move a non-reasoning model to top of candidates list, or (b) add reasoning-model filtering to `ModelConfigLoader`. See OQ-30-1.
+- WARN log added to `PreColonyScoutTicker` should be downgraded to DEBUG once the pipeline is confirmed stable.
+- Flying guard in `PreColonyScoutTicker` (`player.getAbilities().flying`) blocks all PRE_COLONY observations in creative mode. May need revisiting for test convenience.
+
+**Build status:** PASS
+
+---
+
+## 2026-05-18 — Session 29
+
+**Focus:** Browse mode for Planner panel — `BlueprintMaterialsLoader` + Planner panel drill-down UI.
+
+**Work completed:**
+- Created `BlueprintMaterialsLoader.java` — static `getMaterials(structurePack, blueprintPath, level)` reads `config/DragonTweaks/{pack}/{path}{level}.json` via Gson, returns `Map<String, Integer>`, logs warning and returns empty map on missing file or parse failure.
+- Added Browse mode to `PlannerPanelScreen.java` per `planner_panel_spec_v0_4.md`:
+  - `[Browse]` button alongside goal input; goal input narrowed to accommodate it.
+  - `[← Back]` button, visible only in browse mode, navigates up one drill level.
+  - Four browse states: `PACK_LIST → CATEGORY_LIST → BUILDING_LIST → LEVEL_SELECTOR`.
+  - Filesystem population from `config/DragonTweaks/` at each level (packs = subdirs, categories = subdirs, buildings = JSON filenames with level suffix stripped, levels = numeric suffix extracted).
+  - `ITEMS_PER_PAGE = 8` constant added; browse uses separate `browsePage` counter distinct from `currentPage`.
+  - Level selector shows clickable `[1] [2] ...` buttons; selecting a level calls `BlueprintMaterialsLoader.getMaterials()` and renders materials list in-panel.
+  - Prev/Next buttons dispatched through `prevPage()`/`nextPage()` to handle both browse and non-browse modes.
+- Snapshot mode logic untouched throughout.
+
+**Decisions made:**
+- Browse result (materials) shown in-panel within the LEVEL_SELECTOR browse state, not by transitioning to Goal Input mode — avoids needing to construct a `PlannerPanelPayload.GoalResult` client-side.
+- `blueprintPath` passed to `BlueprintMaterialsLoader` as `category + "/" + buildingBase` to match nested directory structure.
+
+**Deferred / carry-forward:**
+- Browse mode untested against real JSON files (no pack data exists in repo yet).
+- Hover highlight on browse entries not implemented (spec mentions it; deprioritized).
+
+**Build status:** PASS
+
+---
+
+## 2026-05-17 — Session 28
+
+**Focus:** D2 blocker — Planner dependency data, full building list with verified research chains.
+
+**Work completed:**
+- Identified ~13 buildings in prior seed data had incorrect or missing research gates
+- Directed Claude Code to extract full research unlock data from MineColonies source repo (`civilian.json` + `technology.json`) into `docs/research_unlocks.md` (145 entries)
+- Rebuilt `planner_dependencies.json` v2 from verified source data — 45 buildings total
+- Confirmed Enchanter is freely buildable (it is a prereq for research, not unlocked by research)
+
+**Decisions made:**
+- School: gated behind `civilian/higherlearning` (Uni L1, Residence total lvl 3, 3x Book)
+- Library: gated behind `civilian/keen` (Uni L1, Residence total lvl 3, 3x Book)
+- Hospital: gated behind `civilian/stamina` (Uni L1, no building prereq, 1x Carrot)
+- Graveyard: gated behind `civilian/remembrance` (Uni L1, Town Hall lvl 2, 8x Bone)
+- Mystical Site: gated behind `civilian/ambition` (Uni L1, no building prereq, 1x Diamond)
+- Composter: gated behind `technology/biodegradable` (Uni L1, Farmer total lvl 3, 64x Bone Meal)
+- Florist: gated behind `technology/flowerpower` (Uni L2, Composter lvl 3)
+- Plantation: gated behind `technology/letitgrow` (Uni L2, Farmer lvl 3)
+- Dyer: gated behind `technology/rainbowheaven` (Uni L2, Composter lvl 3)
+- Glassblower: gated behind `technology/thoselungs` (Uni L2, Smeltery lvl 3)
+- Mechanic: gated behind `technology/whatyaneed` (Uni L2, Blacksmith lvl 3)
+- Concrete Mixer: gated behind `technology/pavetheroad` (Uni L3, Crusher lvl 1)
+- New buildings added: Smeltery, Stonemason, Stone Smeltery, Crusher, Sifter
+- `research_unlocks.md` added to project as permanent reference document
+
+**Deferred / carry-forward:**
+- `PlannerDependencyRegistry.java` BUILDING_HOLDERS map needs entries for new buildings (Smeltery, Stonemason, Stone Smeltery, Crusher, Sifter) — verify ModBuildings DeferredHolder field names against stubs before implementing
+- D2 design complete — implementation session pending
+
+**Build status:** N/A (design session)
+
+---
+
 ## 2026-05-17 — Session 27
 
 **Focus:** D1 blocker — Advisor branching logic design + implementation.
@@ -54,7 +172,6 @@
 - B2: `CitizenRecord` field names for flags and root cause — Claude Code to verify against stubs
 - Known limitation: non-target citizens share `rc14` suppression key — root cause per-citizen requires generator redesign; deferred
 - D1 needs in-game testing before refactor of `AdvisorDiagnosticLoop` is appropriate
-- D2: Full building enumeration with dependency chains for Planner goal input mode — still open
 
 **Build status:** PASS
 
@@ -77,15 +194,13 @@
 - Passive mob locations never reported — spawn data, not tactically useful
 - Sound detection: vanilla + MineColonies mobs only; mod-added mobs excluded until explicitly added
 - Output hard rules: no Y coordinates, no light level numbers, instinct/sense language only; occasional specificity (5–10%) intentional
-- Any capability granted to any role must be defined as optional field in schema — custom role authors must be able to discover all capabilities
+- Any capability granted to any role must be defined as optional field in schema
 
 **Deferred / carry-forward:**
 - OQ-26-1: Reasoning token billing rate on OpenRouter — solve empirically in Phase 2
 - OQ-26-2: Scout `underground_scan_depth` — finalize value in playtest
 - OQ-26-3: Phase 2 compliance prompt engineering for Scout — not yet drafted
 - OQ-26-4: `model_config.json` Java reader interval — not yet specified
-- D1: Advisor branching logic spec — still open (resolved session 27)
-- D2: Planner dependency chains — still open
 
 **Build status:** N/A (design session)
 

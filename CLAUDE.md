@@ -114,6 +114,16 @@ Do not begin any task until all five steps are complete and reported.
 
 ---
 
+## Code Investigation & Change Protocol
+
+1. **Inspect files directly in the repo.** Do not ask the user to paste source code.
+2. **Make the smallest safe change** that achieves the stated goal. No scope creep.
+3. **Do not refactor unrelated code** while fixing a bug or implementing a feature.
+4. **Run `./gradlew build` after every change** (or describe why a build is not applicable).
+5. **Report changed files and any risks** before closing the task.
+
+---
+
 ## Hard Architectural Rules — Never Violate
 
 1. **Nothing may ever block the main Minecraft game thread.** Non-negotiable under any circumstances.

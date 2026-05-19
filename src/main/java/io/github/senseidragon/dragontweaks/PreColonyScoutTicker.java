@@ -1,14 +1,18 @@
 package io.github.senseidragon.dragontweaks;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
@@ -59,6 +63,23 @@ public class PreColonyScoutTicker {
 
         String terrainLabels = TerrainScanner.scan(level, pos);
 
+        AABB raiderBox = AABB.ofSize(player.position(), 200, 128, 200);
+        List<Mob> nearbyRaiders = level.getEntitiesOfClass(Mob.class, raiderBox, e -> {
+            ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(e.getType());
+            if (id == null || !"minecolonies".equals(id.getNamespace())) return false;
+            String path = id.getPath();
+            return !path.equals("citizen") && !path.equals("visitor") && !path.equals("cavalry_horse");
+        });
+        String raiderContext = "";
+        if (!nearbyRaiders.isEmpty()) {
+            raiderContext =
+                "DANGER: " + nearbyRaiders.size() + " hostile MineColonies " +
+                (nearbyRaiders.size() == 1 ? "entity" : "entities") + " (barbarian or outpost type) " +
+                (nearbyRaiders.size() == 1 ? "is" : "are") + " within 100 blocks. " +
+                "There is almost certainly a barbarian encampment or outpost nearby. " +
+                "Strongly warn " + player.getGameProfile().getName() + " — settling here would invite immediate raids.\n";
+        }
+
         BlockPos villagePos = level.findNearestMapStructure(
                 net.minecraft.tags.StructureTags.VILLAGE, pos, 150, false);
         String villageContext = "";
@@ -93,19 +114,20 @@ public class PreColonyScoutTicker {
             "You are at depth Y=" + pos.getY() + " in a " + biomeName + " biome. Time of day: " + timeOfDay + ". Weather: " + weather + ".\n" +
             "Nearby terrain: " + terrainLabels + ".\n" +
             villageContext +
+            raiderContext +
             "The terrain labels above are ground truth observed facts. Never contradict them.\n" +
             "Label key: 'structures' means man-made construction (planks, stone bricks, torches, etc.) is nearby — likely ruins or an abandoned build. 'village' means a vanilla village is nearby (bell, smoker, lectern, etc.).\n" +
             "You are making an unsolicited observation — the player has not asked you anything. " +
-            "Make exactly one specific, opinionated observation about the terrain. Address " + playerName + " directly.\n" +
-            "Speak ONLY about terrain, biome, water proximity, elevation, forest coverage, defensibility, and village proximity and colony placement risk. " +
-            "Never mention colonies, citizens, buildings, happiness, or workers. " +
+            "Make exactly one specific, opinionated observation about this location's suitability as a colony site. Address " + playerName + " directly.\n" +
+            "Assess terrain, biome, water proximity, elevation, forest coverage, defensibility, and any nearby village risk. " +
             "Never reference \"the game\", \"players\", or anything that breaks immersion.\n" +
-            "Respond in 1 short sentence under 100 characters. Never break character. Never say you are an AI." +
+            "Respond in 1 short sentence. Never break character. Never say you are an AI." +
             (random.nextInt(7) == 0 ? "\nYou may use dry wit if the terrain has an obvious problem." : "");
 
-        DragonTweaks.LOGGER.debug("[PreColonyScoutTicker] PRE_COLONY scout for {} at {}:\nTERRAIN: {}\nPROMPT: {}",
-                playerName, pos, terrainLabels, scopedPrompt);
+        DragonTweaks.LOGGER.warn("[PreColonyScoutTicker] Firing LLM query for player={} message=\"terrain seen: {}\" prompt={}",
+                playerName, terrainLabels, scopedPrompt);
         LLMClient.query(server, player, Component.literal("Advisor"),
-                "terrain seen: " + terrainLabels, bookAdvisor.getUUID(), scopedPrompt);
+                "terrain seen: " + terrainLabels, bookAdvisor.getUUID(), scopedPrompt, LLMClient.ADVISORY_MAX_TOKENS,
+                reply -> DragonTweaks.LOGGER.warn("[PreColonyScoutTicker] LLM callback fired for player={} reply={}", playerName, reply));
     }
 }
