@@ -26,6 +26,31 @@
 
 ---
 
+## 2026-05-19 — Session 32
+
+**Focus:** Role-aware model routing and token budget increase for advisory and specialized tiers.
+
+**Work completed:**
+- Rewrote `ModelConfigLoader` to cache the full `roles` JsonObject (all tiers) on a single 15-minute cache. Added `getModel(String role)` that navigates `roles → {role} → candidates[0] → model_id`. `getModel()` delegates to `getModel("advisory")` for backward compatibility.
+- Threaded `modelRole` parameter through `queryWithPrompt()` in `LLMClient`. Flavor NPC `query()` passes `"flavor"`, advisory no-callback `query()` passes `"advisory"`, 7-arg advisory `query()` with callback uses `getModel("advisory")` directly, `observe()` uses `getModel("flavor")` directly.
+- Raised `ADVISORY_MAX_TOKENS` from 750 to 2000. Added `SPECIALIZED_MAX_TOKENS = 2000`.
+- Closed OQ-30-1: `gpt-oss-120b` as advisory candidates[0] is intentional (cheapest qualifying reasoning model). The `content: null` failure was caused by insufficient token budget, not wrong model selection. 2000 tokens is the fix.
+- Closed OQ-28-1: Happiness threshold scale mismatch — decision is to leave thresholds as-is. Advisor observes raw `getFactor()` values; LLM reasons about them. Config values retained for future tuning.
+
+**Decisions made:**
+- `ModelConfigLoader` caches full role table, not a single model string. All 4 tiers (flavor, advisory, specialized, tactical) served from one file read.
+- Token budgets: flavor = 200, advisory = 2000, specialized = 2000. Tactical TBD.
+- MineColonies happiness thresholds will not be adjusted — raw API values passed to LLM for interpretation.
+
+**Deferred / carry-forward:**
+- `SPECIALIZED_MAX_TOKENS` defined but no specialized role callers wired yet — will be threaded in when Planner/Forester roles are implemented.
+- Tactical tier exists in `model_config.json` but has no callers — future Phase.
+- WARN logs in `PreColonyScoutTicker` should be downgraded to DEBUG once pipeline is confirmed stable.
+
+**Build status:** PASS
+
+---
+
 ## 2026-05-19 — Session 31
 
 **Focus:** ModelConfigLoader cache, hostile entity detection, stale state auto-correction.

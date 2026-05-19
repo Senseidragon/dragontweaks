@@ -28,7 +28,7 @@
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
 | Client class | `LLMClient.java` — do not rename, do not recreate |
 | Model | Loaded from `run/model_config.json` → `roles → first role → candidates[0] → model_id`. Fallback: `google/gemma-4-26b-a4b-it` |
-| max_tokens | **200** for flavor NPCs / **750** for all advisory roles. Set via `MAX_RESPONSE_TOKENS` / `ADVISORY_MAX_TOKENS` constants in `LLMClient.java`. |
+| max_tokens | **200** for flavor NPCs / **2000** for advisory and specialized roles. Set via `MAX_RESPONSE_TOKENS` / `ADVISORY_MAX_TOKENS` / `SPECIALIZED_MAX_TOKENS` constants in `LLMClient.java`. |
 | stream | false — always |
 | reasoning | Commented out (incompatible with current model). Not a bug. Re-enable when switching back to gemma. |
 
@@ -64,8 +64,8 @@ All in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `ConversationMemory.java` | ✅ Complete | Per-NPC conversation history. |
 | `EnvLoader.java` | ✅ Complete | Reads `.env` for API key. |
 | `FollowPlayerGoal.java` | ✅ Complete | AI goal for follow behavior. |
-| `LLMClient.java` | ✅ Complete | OpenRouter async HTTP client. `buildRequestBody` takes `maxTokens` param. Advisory calls (`query(UUID, systemPrompt)` and 7-arg variant) use `ADVISORY_MAX_TOKENS = 750`. Flavor NPC calls (role-based `query`, `observe`) use `MAX_RESPONSE_TOKENS = 200`. `parseResponse` has `isJsonNull()` guards on `choices`, `message`, and `content`. Exception logging includes exception class name. Reasoning block commented out. |
-| `ModelConfigLoader.java` | ✅ Complete | Reads `run/model_config.json` via Gson. Navigates `roles → first role → candidates[0] → model_id`. Full null/missing-field guards at each step. Falls back to `google/gemma-4-26b-a4b-it` on any error. 15-minute cache: result stored in `cachedModel`/`cacheExpiryMs`; fallback paths not cached so the next call retries the file. |
+| `LLMClient.java` | ✅ Complete | OpenRouter async HTTP client. `buildRequestBody` takes `maxTokens` param. Advisory calls use `ADVISORY_MAX_TOKENS = 2000`; specialized use `SPECIALIZED_MAX_TOKENS = 2000`; flavor use `MAX_RESPONSE_TOKENS = 200`. `queryWithPrompt` takes `modelRole` string for routing. Flavor queries route to `"flavor"` tier; advisory queries route to `"advisory"` tier. `parseResponse` has `isJsonNull()` guards. Reasoning block commented out. |
+| `ModelConfigLoader.java` | ✅ Complete | Reads `run/model_config.json` via Gson. Caches full `roles` JsonObject (all tiers). `getModel(role)` navigates `roles → {role} → candidates[0] → model_id`. `getModel()` delegates to `getModel("advisory")`. 15-minute cache covers all tiers from one file read. Fallback paths not cached. Falls back to `google/gemma-4-26b-a4b-it` on any error. |
 | `ModEntities.java` | ✅ Complete | `ASSISTANT` and `BOOK_ADVISOR` DeferredHolder registrations. |
 | `NicknameData.java` | ✅ Complete | SavedData on overworld (`"dragontweaks_nicknames"`). Map keyed by `"colonyId:citizenId"`. |
 | `ObservationTicker.java` | ✅ Complete | Proactive NPC observations. 100-tick interval. Greeting trigger, raid poll, event reactions. |
@@ -171,9 +171,11 @@ All in `Config.java`. Verify exact field names against source before referencing
 - `ColonyCreatedModEvent` fires on world load for restored colonies, not only on fresh placement. This can cause a stale PRE_COLONY → COLONY_NO_CITIZEN transition if the advisor state persisted from a prior session.
 - `ChatInterceptor` auto-corrects: if state is `COLONY_NO_CITIZEN` but no colony is found for the player, it resets state to PRE_COLONY on the spot and re-runs the BookAdvisor search — no relog required.
 
-### ModelConfigLoader Cache Interval (locked 2026-05-19)
+### ModelConfigLoader Cache and Role Routing (locked 2026-05-19)
 - `model_config.json` is re-read at most once every 15 minutes (`CACHE_DURATION_MS = 15 * 60 * 1000L`).
+- Full `roles` JsonObject is cached (all tiers: flavor, advisory, specialized, tactical). `getModel(role)` serves any tier from the same cached read.
 - Fallback returns (file not found, parse error) are intentionally not cached — the next call retries immediately.
+- Token budgets: flavor = 200, advisory = 2000, specialized = 2000, tactical = TBD.
 
 ### Advisor State Transition — CitizenJobChangedModEvent (locked 2026-05-19)
 - `CitizenJobChangedModEvent` must NOT trigger COLONY_WITH_CITIZEN → COLONY_NO_CITIZEN.

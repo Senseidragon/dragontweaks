@@ -16,16 +16,28 @@ public final class ModelConfigLoader {
     private static final String FALLBACK = "google/gemma-4-26b-a4b-it";
     private static final long CACHE_DURATION_MS = 15 * 60 * 1000L; // 15 minutes
 
-    private static volatile String cachedModel = null;
+    private static volatile JsonObject cachedRoles = null;
     private static volatile long cacheExpiryMs = 0L;
 
     private ModelConfigLoader() {}
 
     public static String getModel() {
+        return getModel("advisory");
+    }
+
+    public static String getModel(String role) {
         long now = System.currentTimeMillis();
-        if (cachedModel != null && now < cacheExpiryMs) {
-            return cachedModel;
+        JsonObject roles = cachedRoles;
+        if (roles == null || now >= cacheExpiryMs) {
+            roles = loadRoles(now);
         }
+        if (roles == null) return FALLBACK;
+        return extractModel(roles, role);
+    }
+
+    private static synchronized JsonObject loadRoles(long now) {
+        // Double-checked locking
+        if (cachedRoles != null && now < cacheExpiryMs) return cachedRoles;
 
         Path path = Path.of(System.getProperty("user.dir"), "model_config.json");
         String json;
@@ -33,10 +45,10 @@ public final class ModelConfigLoader {
             json = Files.readString(path, StandardCharsets.UTF_8);
         } catch (NoSuchFileException e) {
             DragonTweaks.LOGGER.warn("model_config.json not found at {} — using fallback model: {}", path, FALLBACK);
-            return FALLBACK;
+            return null;
         } catch (IOException e) {
             DragonTweaks.LOGGER.warn("Failed to read model_config.json: {} — using fallback model: {}", e.getMessage(), FALLBACK);
-            return FALLBACK;
+            return null;
         }
 
         try {
@@ -44,31 +56,39 @@ public final class ModelConfigLoader {
             JsonObject roles = root.getAsJsonObject("roles");
             if (roles == null || roles.isJsonNull() || roles.entrySet().isEmpty()) {
                 DragonTweaks.LOGGER.warn("model_config.json has no roles — using fallback model: {}", FALLBACK);
-                return FALLBACK;
+                return null;
             }
-            JsonObject firstRole = roles.entrySet().iterator().next().getValue().getAsJsonObject();
-            JsonArray candidates = firstRole.getAsJsonArray("candidates");
-            if (candidates == null || candidates.isJsonNull() || candidates.size() == 0) {
-                DragonTweaks.LOGGER.warn("model_config.json has no candidates — using fallback model: {}", FALLBACK);
-                return FALLBACK;
-            }
-            JsonElement modelIdEl = candidates.get(0).getAsJsonObject().get("model_id");
-            if (modelIdEl == null || modelIdEl.isJsonNull()) {
-                DragonTweaks.LOGGER.warn("model_config.json first candidate has no model_id — using fallback model: {}", FALLBACK);
-                return FALLBACK;
-            }
-            String modelId = modelIdEl.getAsString().trim();
-            if (modelId.isEmpty()) {
-                DragonTweaks.LOGGER.warn("model_config.json model_id is empty — using fallback model: {}", FALLBACK);
-                return FALLBACK;
-            }
-            cachedModel = modelId;
+            cachedRoles = roles;
             cacheExpiryMs = now + CACHE_DURATION_MS;
-            DragonTweaks.LOGGER.info("[ModelConfigLoader] LLM model loaded from model_config.json: {}", modelId);
-            return modelId;
+            DragonTweaks.LOGGER.info("[ModelConfigLoader] Role table loaded from model_config.json ({} tiers)", roles.entrySet().size());
+            return roles;
         } catch (Exception e) {
             DragonTweaks.LOGGER.warn("Failed to parse model_config.json: {} — using fallback model: {}", e.getMessage(), FALLBACK);
+            return null;
+        }
+    }
+
+    private static String extractModel(JsonObject roles, String role) {
+        JsonElement roleEl = roles.get(role);
+        if (roleEl == null || roleEl.isJsonNull()) {
+            DragonTweaks.LOGGER.warn("[ModelConfigLoader] Role '{}' not found in model_config.json — using fallback: {}", role, FALLBACK);
             return FALLBACK;
         }
+        JsonArray candidates = roleEl.getAsJsonObject().getAsJsonArray("candidates");
+        if (candidates == null || candidates.isJsonNull() || candidates.size() == 0) {
+            DragonTweaks.LOGGER.warn("[ModelConfigLoader] No candidates for role '{}' — using fallback: {}", role, FALLBACK);
+            return FALLBACK;
+        }
+        JsonElement modelIdEl = candidates.get(0).getAsJsonObject().get("model_id");
+        if (modelIdEl == null || modelIdEl.isJsonNull()) {
+            DragonTweaks.LOGGER.warn("[ModelConfigLoader] No model_id for role '{}' candidate[0] — using fallback: {}", role, FALLBACK);
+            return FALLBACK;
+        }
+        String modelId = modelIdEl.getAsString().trim();
+        if (modelId.isEmpty()) {
+            DragonTweaks.LOGGER.warn("[ModelConfigLoader] Empty model_id for role '{}' — using fallback: {}", role, FALLBACK);
+            return FALLBACK;
+        }
+        return modelId;
     }
 }

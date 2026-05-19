@@ -33,7 +33,8 @@ public class LLMClient {
     private static volatile HttpClient HTTP = newHttpClient(EXECUTOR);
 
     static final int MAX_RESPONSE_TOKENS = 200;
-    static final int ADVISORY_MAX_TOKENS = 750;
+    static final int ADVISORY_MAX_TOKENS = 2000;
+    static final int SPECIALIZED_MAX_TOKENS = 2000;
 
     private static ExecutorService newExecutor() {
         return Executors.newSingleThreadExecutor(r -> new Thread(r, "dragontweaks-llm"));
@@ -208,7 +209,7 @@ public class LLMClient {
         String userContent = history.isEmpty()
             ? playerName + " says: " + message
             : "[Prior conversation:]\n" + history + "\n\n" + playerName + " says: " + message;
-        String requestBody = buildRequestBody(ModelConfigLoader.getModel(), userContent, systemPrompt, maxTokens);
+        String requestBody = buildRequestBody(ModelConfigLoader.getModel("advisory"), userContent, systemPrompt, maxTokens);
 
         HttpRequest request;
         try {
@@ -292,7 +293,7 @@ public class LLMClient {
                 + "Always respond in the language identified by locale code: " + locale + ".\n";
         String userContent = "You just noticed: " + whatChanged +
                              ". React in character in 1-2 short sentences. Address " + playerName + " directly.";
-        String requestBody = buildRequestBody(ModelConfigLoader.getModel(), userContent, systemPrompt, MAX_RESPONSE_TOKENS);
+        String requestBody = buildRequestBody(ModelConfigLoader.getModel("flavor"), userContent, systemPrompt, MAX_RESPONSE_TOKENS);
 
         HttpRequest request;
         try {
@@ -332,7 +333,7 @@ public class LLMClient {
         String locale = AssistantCommand.localeOverride != null ? AssistantCommand.localeOverride : "en_us";
         String systemPrompt = buildSystemPrompt(npcName, role, playerName, timeOfDay, weather, surroundings)
                 + "Always respond in the language identified by locale code: " + locale + ".\n";
-        queryWithPrompt(server, player, entityName, message, npcId, systemPrompt, MAX_RESPONSE_TOKENS);
+        queryWithPrompt(server, player, entityName, message, npcId, systemPrompt, MAX_RESPONSE_TOKENS, "flavor");
     }
 
     // Advisory query without callback — always uses ADVISORY_MAX_TOKENS.
@@ -343,12 +344,12 @@ public class LLMClient {
             server.execute(() -> sendFallback(player, entityName));
             return;
         }
-        queryWithPrompt(server, player, entityName, message, npcId, systemPrompt, ADVISORY_MAX_TOKENS);
+        queryWithPrompt(server, player, entityName, message, npcId, systemPrompt, ADVISORY_MAX_TOKENS, "advisory");
     }
 
     private static void queryWithPrompt(MinecraftServer server, ServerPlayer player,
                                         Component entityName, String message,
-                                        UUID npcId, String systemPrompt, int maxTokens) {
+                                        UUID npcId, String systemPrompt, int maxTokens, String modelRole) {
         ensureAlive();
 
         String apiKey = EnvLoader.get("OPENROUTER_API_KEY");
@@ -364,7 +365,7 @@ public class LLMClient {
         String userContent = history.isEmpty()
             ? playerName + " says: " + message
             : "[Prior conversation:]\n" + history + "\n\n" + playerName + " says: " + message;
-        String requestBody = buildRequestBody(ModelConfigLoader.getModel(), userContent, systemPrompt, maxTokens);
+        String requestBody = buildRequestBody(ModelConfigLoader.getModel(modelRole), userContent, systemPrompt, maxTokens);
 
         HttpRequest request;
         try {

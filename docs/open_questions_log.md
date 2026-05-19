@@ -1,5 +1,5 @@
 # DragonTweaks — Master Open Questions Log
-*Last updated: 2026-05-19 (sessions 26 + 27 + 28 + 29 + 30 + 31)*
+*Last updated: 2026-05-19 (sessions 26 + 27 + 28 + 29 + 30 + 31 + 32)*
 *Purpose: Single source of truth for all unresolved questions. Check this before starting any design or implementation session.*
 
 ---
@@ -53,7 +53,7 @@
 | OQ-26-3 | 🔁 | Phase 2 compliance prompt engineering for Scout | Sound detection, threat inference, atmospheric language prompts not yet drafted |
 | OQ-26-4 | ✅ | `model_config.json` Java reader interval | **Answer:** 15-minute cache implemented in `ModelConfigLoader.java` (session 31). Fallback paths not cached — next call retries. |
 | OQ-27-1 | 🔁 | Non-target citizens share `rc14` suppression key — root cause per-citizen requires generator redesign | Deferred — known limitation, revisit after D1 in-game testing |
-| OQ-30-1 | 🔲 | `model_config.json` first candidate (`openai/gpt-oss-120b`) is a reasoning model — spends token budget on reasoning, returns `content: null`. Should `ModelConfigLoader` filter out reasoning models (e.g. by `reasoning_excluded` flag or model ID suffix), or must the candidates list be manually curated to put a non-reasoning model first? | Advisory LLM responses in all states |
+| OQ-30-1 | ✅ | `model_config.json` first candidate (`openai/gpt-oss-120b`) is a reasoning model — spends token budget on reasoning, returns `content: null`. **Answer:** `gpt-oss-120b` as advisory candidates[0] is intentional — it is the cheapest qualifying reasoning model. The real fix was an insufficient token budget (750 tokens too small for reasoning overhead). `ADVISORY_MAX_TOKENS` raised to 2000 (session 32). ModelConfigLoader now caches all role tiers and dispatches via `getModel(role)`. No model filtering needed. |
 
 ---
 
@@ -87,6 +87,8 @@
 | B2 | `CitizenRecord` field names for red/yellow flags and root cause ordinal | Red/yellow flags on `HappinessFactor.isRedFlag()`/`isYellowFlag()`. Root cause on report-level `RootCause` enum. `AdvisorDiagnosticLoop.java` confirmed clean — no invalid field access. | 2026-05-18 |
 | B3 | `PlannerDependencyRegistry.java` BUILDING_HOLDERS map for 5 new buildings | Registry is JSON-driven. No BUILDING_HOLDERS map exists or is needed. 5 new buildings already covered by `planner_dependencies.json` v2. | 2026-05-18 |
 | OQ-26-4 | `model_config.json` Java reader interval | 15-minute cache in `ModelConfigLoader.java`. Fallback paths not cached. | 2026-05-19 |
+| OQ-28-1 | Happiness threshold scale mismatch vs. actual MineColonies `getFactor()` range | Leave thresholds as-is. Advisor observes raw API values; LLM reasons about them. Config values retained for future tuning. | 2026-05-19 |
+| OQ-30-1 | `gpt-oss-120b` as advisory candidates[0] returns `content: null` | Architectural intent confirmed — cheapest reasoning model is first. Fix was token budget: `ADVISORY_MAX_TOKENS` raised to 2000. `ModelConfigLoader` now role-aware (`getModel(role)`). | 2026-05-19 |
 
 ---
 
@@ -94,7 +96,7 @@
 
 | # | Status | Observation | Action Required |
 |---|---|---|---|
-| OQ-28-1 | 🔲 | Happiness threshold values vs. actual MineColonies scale — `ADVISOR_HAPPINESS_THRESHOLD_RED` (0.5) and `ADVISOR_HAPPINESS_THRESHOLD_YELLOW` (0.9) were defined assuming a 0–1 factor scale. `IHappinessModifier.getFactor()` uses a scale where 1.0 is neutral, values can go below 0, and the upper bound is unbounded. `social: -1.00` observed in live testing on a fresh colony — confirmed expected behavior for `ExpirationBasedHappinessModifier` with no interaction history. Threshold values need design review before Advisor LLM recommendations go live. Do not adjust thresholds without consulting the MineColonies source for what constitutes a "bad" factor value on this scale. | Design session required — review MineColonies source to establish meaningful threshold values on the actual scale |
+| OQ-28-1 | ✅ | Happiness threshold values vs. actual MineColonies scale — `ADVISOR_HAPPINESS_THRESHOLD_RED` (0.5) and `ADVISOR_HAPPINESS_THRESHOLD_YELLOW` (0.9) were defined assuming a 0–1 factor scale. `IHappinessModifier.getFactor()` uses a scale where 1.0 is neutral, values can go below 0, and the upper bound is unbounded. **Decision (session 32):** Leave thresholds as-is. The advisor observes what the API gives and lets the LLM reason about it. No threshold adjustment. Values remain in Config.java for future tuning if needed. |
 
 ---
 

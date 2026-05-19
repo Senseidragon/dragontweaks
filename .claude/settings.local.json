@@ -73,7 +73,12 @@
       "Bash(python *)",
       "Bash(cp \"C:/Users/sense/Desktop/DragonTweaks/docs/CLAUDE.md\" \"C:/Users/sense/Desktop/DragonTweaks/CLAUDE.md\")",
       "Bash(rm \"C:/Users/sense/Desktop/DragonTweaks/docs/CLAUDE.md\")",
-      "Bash(rm \"C:/Users/sense/Desktop/DragonTweaks/docs/dtdocs.zip\")"
+      "Bash(rm \"C:/Users/sense/Desktop/DragonTweaks/docs/dtdocs.zip\")",
+      "Bash(py --version)",
+      "Bash(where python3 *)",
+      "Bash(where py *)",
+      "Bash(grep -v \"^| .* | — |$\" \"C:/Users/sense/Desktop/DragonTweaks/docs/research_unlocks.md\")",
+      "Bash(echo \"Client launching in background PID=$!\")"
     ]
   }
 }
