@@ -39,8 +39,14 @@ public class TerrainScanner {
             }
         }
 
-        // Village detection via structure registry — 300-block radius (~19 chunks)
-        BlockPos villagePos = level.findNearestMapStructure(StructureTags.VILLAGE, center, 19, false);
+        int villageRadiusBlocks = Config.SCOUT_VILLAGE_REPORT_RADIUS.get();
+        int villageRadiusChunks = Math.max(1, (villageRadiusBlocks + 15) / 16);
+        BlockPos villagePos = level.findNearestMapStructure(StructureTags.VILLAGE, center, villageRadiusChunks, false);
+        if (villagePos != null) {
+            int vdx = villagePos.getX() - center.getX();
+            int vdz = villagePos.getZ() - center.getZ();
+            if ((int) Math.sqrt(vdx * vdx + vdz * vdz) > villageRadiusBlocks) villagePos = null;
+        }
 
         List<String> labels = new ArrayList<>();
         if (ice) labels.add("ice");

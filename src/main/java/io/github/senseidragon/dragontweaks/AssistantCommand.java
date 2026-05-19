@@ -96,6 +96,9 @@ public class AssistantCommand {
                         )
                     )
                 )
+                .then(Commands.literal("list")
+                    .executes(ctx -> listAssignments(ctx))
+                )
         );
         if (DebugConfig.DEBUG_ENABLED) {
             AssistantDebugCommand.register(event.getDispatcher());
@@ -409,6 +412,53 @@ public class AssistantCommand {
         final int citizenId = citizen.getId();
         ctx.getSource().sendSuccess(() -> Component.literal(
             "[DragonTweaks] Nickname set: " + citizenName + " (id=" + citizenId + ") → \"" + nickname + "\""), false);
+        return 1;
+    }
+
+    private static int listAssignments(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        if (!ModList.get().isLoaded("minecolonies")) {
+            ctx.getSource().sendFailure(Component.literal("MineColonies is not loaded."));
+            return 0;
+        }
+        ServerLevel overworld = player.getServer().getLevel(Level.OVERWORLD);
+        if (overworld == null) return 0;
+
+        IColony colony = null;
+        for (ServerLevel level : player.getServer().getAllLevels()) {
+            for (IColony c : IColonyManager.getInstance().getColonies(level)) {
+                if (player.getUUID().equals(c.getPermissions().getOwner())) {
+                    colony = c;
+                    break;
+                }
+            }
+            if (colony != null) break;
+        }
+        if (colony == null) {
+            ctx.getSource().sendFailure(Component.literal("You don't have a colony."));
+            return 0;
+        }
+
+        RoleAssignmentData roleData = RoleAssignmentData.get(overworld);
+        List<String> lines = new ArrayList<>();
+        for (ICitizenData citizen : colony.getCitizenManager().getCitizens()) {
+            if (!roleData.isAssigned(colony.getID(), citizen.getId())) continue;
+            String role = roleData.getRecord(colony.getID(), citizen.getId()).roleType();
+            String displayName = NicknameData.resolve(overworld, colony.getID(), citizen.getId(), citizen.getName());
+            String nicknameNote = displayName.equalsIgnoreCase(citizen.getName()) ? "" : " [nickname: " + displayName + "]";
+            lines.add("  " + citizen.getName() + " (id=" + citizen.getId() + ") \u2192 " + role + nicknameNote);
+        }
+
+        if (lines.isEmpty()) {
+            ctx.getSource().sendSuccess(() -> Component.literal("[DragonTweaks] No citizens currently assigned."), false);
+            return 1;
+        }
+
+        ctx.getSource().sendSuccess(() -> Component.literal("[DragonTweaks] Assigned citizens:"), false);
+        for (String line : lines) {
+            final String l = line;
+            ctx.getSource().sendSuccess(() -> Component.literal(l), false);
+        }
         return 1;
     }
 

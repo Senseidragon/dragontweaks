@@ -146,10 +146,26 @@ public class LLMClient {
             if (contentEl == null || contentEl.isJsonNull()) {
                 throw new IllegalArgumentException("Null content in message: " + json);
             }
-            return contentEl.getAsString();
+            String content = contentEl.getAsString();
+            String cleaned = cleanResponse(content);
+            if (cleaned.isEmpty()) {
+                throw new IllegalArgumentException("Response empty after stripping model tokens: " + json);
+            }
+            return cleaned;
         } catch (NullPointerException | IllegalStateException e) {
             throw new IllegalArgumentException("Unexpected OpenRouter response: " + json, e);
         }
+    }
+
+    // Strip model-internal special tokens (e.g. <|channel|>analysis<|message|>) that leak into output.
+    // If the response contains <|message|>, take everything after the last occurrence.
+    // Then remove any remaining <|...|> tokens.
+    private static String cleanResponse(String raw) {
+        int lastMsg = raw.lastIndexOf("<|message|>");
+        if (lastMsg >= 0) {
+            raw = raw.substring(lastMsg + "<|message|>".length());
+        }
+        return raw.replaceAll("<\\|[^|]*\\|>", "").trim();
     }
 
     private static String buildRequestBody(String model, String userContent, String systemPrompt, int maxTokens) {
@@ -185,10 +201,10 @@ public class LLMClient {
         );
     }
 
-    // Advisory query with callback — maxTokens lets callers specify budget.
+    // Query with callback — caller specifies model role and token budget.
     public static void query(MinecraftServer server, ServerPlayer player,
                              Component entityName, String message,
-                             UUID npcId, String systemPrompt, int maxTokens,
+                             UUID npcId, String systemPrompt, int maxTokens, String modelRole,
                              Consumer<String> onReply) {
         if (!Config.LLM_ENABLED.get()) {
             server.execute(() -> sendFallback(player, entityName));
@@ -209,7 +225,7 @@ public class LLMClient {
         String userContent = history.isEmpty()
             ? playerName + " says: " + message
             : "[Prior conversation:]\n" + history + "\n\n" + playerName + " says: " + message;
-        String requestBody = buildRequestBody(ModelConfigLoader.getModel("advisory"), userContent, systemPrompt, maxTokens);
+        String requestBody = buildRequestBody(ModelConfigLoader.getModel(modelRole), userContent, systemPrompt, maxTokens);
 
         HttpRequest request;
         try {

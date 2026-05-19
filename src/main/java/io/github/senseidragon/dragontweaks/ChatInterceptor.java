@@ -47,7 +47,10 @@ public class ChatInterceptor {
             }
         }
 
-        if (candidates.isEmpty() && bookAdvisor == null && earlyState != AdvisorState.COLONY_NO_CITIZEN && earlyState != AdvisorState.COLONY_WITH_CITIZEN) return;
+        if (candidates.isEmpty() && bookAdvisor == null
+                && earlyState != AdvisorState.COLONY_NO_CITIZEN
+                && earlyState != AdvisorState.COLONY_WITH_CITIZEN
+                && !ModList.get().isLoaded("minecolonies")) return;
 
         String messageLower = event.getRawText().toLowerCase();
         String[] messageWords = messageLower.split("\\s+");
@@ -242,6 +245,7 @@ public class ChatInterceptor {
                 for (ICitizenData citizen : citizenColony.getCitizenManager().getCitizens()) {
                     if (citizen instanceof IVisitorData) continue;
                     if (roleData.isAssigned(citizenColony.getID(), citizen.getId())) continue;
+                    if (!CitizenAcknowledgmentData.get(overworld).isAcknowledged(citizenColony.getID(), citizen.getId())) continue;
                     String displayName = NicknameData.resolve(overworld, cId, citizen.getId(), citizen.getName());
                     boolean nicknameMatch = messageLower.contains(displayName.toLowerCase());
                     boolean realNameMatch = !displayName.equalsIgnoreCase(citizen.getName())
@@ -297,6 +301,13 @@ public class ChatInterceptor {
                 rawMessage);
 
             String surroundings = LLMClient.scanSurroundings(serverLevel, target);
+            if (citizenColony != null) {
+                String roster = ColonyContextBuilder.buildRoster(
+                        citizenColony, player.getServer().overworld(), serverLevel, player);
+                if (!roster.isEmpty()) {
+                    surroundings += "\nColony members you know:\n" + roster;
+                }
+            }
             if (advisorState == AdvisorState.PRE_COLONY && advisorTargets.contains(target)) {
                 String npcName = entityName.getString();
                 String playerName = player.getGameProfile().getName();
@@ -451,13 +462,18 @@ public class ChatInterceptor {
             final String fDisplayName = matchedDisplayName;
             final String fJobDesc = matchedJobDesc;
             final String playerName = player.getGameProfile().getName();
+            String roster = ColonyContextBuilder.buildRoster(citizenColony, overworld, serverLevel, player);
+            String colonyContext = roster.isEmpty() ? "" : "\nOther colony members you know:\n" + roster;
             String systemPrompt =
-                "You are " + fDisplayName + ", a MineColonies citizen working as " + fJobDesc + ". " +
-                "Respond in character as a " + fJobDesc + " in a medieval colony. Keep responses brief.";
+                "You are " + fDisplayName + ", a MineColonies citizen working as " + fJobDesc + " in a medieval colony. " +
+                "Respond in character. Keep responses to 1-2 sentences.\n" +
+                colonyContext +
+                "The colony member list above includes a 'last seen' compass direction for each citizen. If asked where someone is, give only that general direction (e.g. 'I think I last saw them to the north'). Never invent specific locations like building names or landmarks.\n" +
+                "Output only your spoken reply. No reasoning, no labels, no formatting tokens, no preamble. Never break character. Never say you are an AI.";
             UUID citizenNpcId = UUID.nameUUIDFromBytes(
                 ("citizen:" + fColonyId + ":" + fCitizenId).getBytes(java.nio.charset.StandardCharsets.UTF_8));
             LLMClient.query(server, player, Component.literal(fDisplayName), rawMessage,
-                citizenNpcId, systemPrompt, LLMClient.MAX_RESPONSE_TOKENS,
+                citizenNpcId, systemPrompt, LLMClient.MAX_RESPONSE_TOKENS, "flavor",
                 reply -> {
                     citizenMemory.appendHistory(fColonyId, fCitizenId, playerName, rawMessage);
                     citizenMemory.appendHistory(fColonyId, fCitizenId, fDisplayName, reply);

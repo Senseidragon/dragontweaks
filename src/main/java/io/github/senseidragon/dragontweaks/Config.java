@@ -99,6 +99,10 @@ public class Config {
             .comment("Colony days to suppress repeat Advisor observations for a citizen whose root cause has not changed")
             .defineInRange("advisorRootcauseSuppressDays", 2, 0, 30);
 
+    public static final ModConfigSpec.IntValue SCOUT_VILLAGE_REPORT_RADIUS = BUILDER
+            .comment("Maximum distance in blocks within which a nearby village is reported during PRE_COLONY scouting. Villages beyond this distance are ignored.")
+            .defineInRange("scoutVillageReportRadius", 256, 16, 1024);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     static void onLoad(ModConfigEvent event) {

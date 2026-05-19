@@ -26,6 +26,37 @@
 
 ---
 
+## 2026-05-19 — Session 33
+
+**Focus:** Bug fixes and enhancements from live testing — model leak, model routing, village radius, citizen location hallucination, `/assistant list`.
+
+**Work completed:**
+- **Model token leak fix (`LLMClient.java`):** Added `cleanResponse()` — strips model-internal special tokens (`<|channel|>`, `<|message|>` and any `<|...|>` pattern) from all LLM responses before delivery. If stripping leaves an empty string, fallback fires instead.
+- **Model routing fix (`LLMClient.java`):** Removed hardcoded `"advisory"` from 8-arg `query()` callback overload. Added `modelRole` parameter — callers now declare their tier explicitly.
+- **Citizen conversation routing (`ChatInterceptor.java`):** Citizen conversation (non-assigned citizens like Mav) now passes `"flavor"` model role. Was incorrectly routing to `"advisory"` (reasoning model) because it reused the advisory callback overload.
+- **PRE_COLONY scout routing (`PreColonyScoutTicker.java`):** Now routes to `"specialized"` model with `SPECIALIZED_MAX_TOKENS`. Was routing to `"advisory"` — scouting is a Scout/specialized function, not an advisory one.
+- **Creative mode gate fix (`PreColonyScoutTicker.java`):** Replaced `player.getAbilities().flying` with `player.isCreative()`. Survival elytra flight no longer suppresses scout observations.
+- **Village radius bug fix (`PreColonyScoutTicker.java`, `TerrainScanner.java`):** `findNearestMapStructure` radius parameter is in chunks, not blocks. Was passing hardcoded `150` (chunks = 2,400 blocks) and `19` (chunks = ~300 blocks). Both now use `SCOUT_VILLAGE_REPORT_RADIUS` config value in blocks, converted to chunks via `(blocks + 15) / 16`. Post-find exact block-distance guard added — rejects villages beyond the config threshold.
+- **New config value (`Config.java`):** `SCOUT_VILLAGE_REPORT_RADIUS` — max distance in blocks within which a village is reported during scouting. Default 256, range 16–1024.
+- **Citizen location hallucination fix (`ChatInterceptor.java`, `ColonyContextBuilder.java`):** Citizens were inventing location names ("market square") when asked where someone is. `ColonyContextBuilder` now computes compass direction from player to each citizen's work building and injects `"last seen to the north"` style labels into the roster. Citizen system prompt updated to use that direction data and forbid invented landmarks.
+- **Citizen prompt hardening (`ChatInterceptor.java`):** Added explicit output constraint: "Output only your spoken reply. No reasoning, no labels, no formatting tokens, no preamble."
+- **`/assistant list` command (`AssistantCommand.java`):** New subcommand. Lists all assigned citizens for the player's colony — name, citizen ID, role, and nickname if set.
+
+**Decisions made:**
+- Village proximity is measured in blocks everywhere. Config value is always in blocks; conversion to chunks happens at the API call site only.
+- Citizens should give compass-direction hints for other citizens' locations based on work building position — not refuse, and not fabricate named landmarks.
+- Non-assigned citizens (flavor-tier) always route to `"flavor"` model regardless of query content.
+- PRE_COLONY scouting routes to `"specialized"` — Scout is a specialized role, not an advisory one.
+- Player in-game chat containing "Claude Code" (not in LLM responses) is a direct note to the AI. Saved to Claude Code memory for future log scans.
+
+**Deferred / carry-forward:**
+- OQ-27-1: Non-target citizens sharing `rc0` suppression key — deferred indefinitely.
+- Tests 3, 4, 5 from this session's test list (PRE_COLONY village threshold, elytra flight gate, direct chat village distance) — require a fresh PRE_COLONY world state to verify.
+
+**Build status:** PASS
+
+---
+
 ## 2026-05-19 — Session 32
 
 **Focus:** Role-aware model routing and token budget increase for advisory and specialized tiers.

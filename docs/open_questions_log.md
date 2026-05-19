@@ -1,5 +1,5 @@
 # DragonTweaks — Master Open Questions Log
-*Last updated: 2026-05-19 (sessions 26 + 27 + 28 + 29 + 30 + 31 + 32)*
+*Last updated: 2026-05-19 (sessions 26 + 27 + 28 + 29 + 30 + 31 + 32 + 33 + 34 + 35)*
 *Purpose: Single source of truth for all unresolved questions. Check this before starting any design or implementation session.*
 
 ---
@@ -40,20 +40,10 @@
 
 | # | Status | Question | Notes |
 |---|---|---|---|
-| R1 | 🔁 | Mod final name | TBD |
-| R2 | 🔁 | Flavor NPC spawn cap value | Design session needed before implementation |
-| R3 | 🔁 | Auto-detect client locale via packet | NeoForge 1.21.1 API path verification needed |
-| R4 | 🔁 | LLM intent classification for command parser (FOLLOW/STOP/NONE) | Architectural decision pending |
-| R5 | 🔁 | Full mode LLM summary paragraph — prompt design for panel context | Panel structure resolved; LLM prompt wording TBD at implementation |
-| R6 | 🔁 | NPC cross-awareness | Revisit Phase 4 |
-| R7 | 🔁 | Shadow entity multiplayer visibility | Test Phase 2 |
 | R8 | 🔁 | Quest system | Parking lot — no timeline |
-| OQ-26-1 | 🔁 | Reasoning token billing rate on OpenRouter | Solve empirically in Phase 2 — fire identical prompt at reasoning vs non-reasoning model |
-| OQ-26-2 | 🔁 | Scout `underground_scan_depth` — finalize value | Currently 10, range 8–12; adjust based on playtest |
-| OQ-26-3 | 🔁 | Phase 2 compliance prompt engineering for Scout | Sound detection, threat inference, atmospheric language prompts not yet drafted |
-| OQ-26-4 | ✅ | `model_config.json` Java reader interval | **Answer:** 15-minute cache implemented in `ModelConfigLoader.java` (session 31). Fallback paths not cached — next call retries. |
-| OQ-27-1 | 🔁 | Non-target citizens share `rc14` suppression key — root cause per-citizen requires generator redesign | Deferred — known limitation, revisit after D1 in-game testing |
-| OQ-30-1 | ✅ | `model_config.json` first candidate (`openai/gpt-oss-120b`) is a reasoning model — spends token budget on reasoning, returns `content: null`. **Answer:** `gpt-oss-120b` as advisory candidates[0] is intentional — it is the cheapest qualifying reasoning model. The real fix was an insufficient token budget (750 tokens too small for reasoning overhead). `ADVISORY_MAX_TOKENS` raised to 2000 (session 32). ModelConfigLoader now caches all role tiers and dispatches via `getModel(role)`. No model filtering needed. |
+| OQ-27-1 | 🔁 | Non-target citizens share `rc0` suppression key — root cause per-citizen requires `ColonyDiagnosticReportGenerator` redesign to compute root cause for all pre-scanned citizens, not just the target | Known limitation. Revisit after AdvisorDiagnosticLoop in-game testing confirms overall system is stable |
+| OQ-33-1 | ✅ | `PreColonyScoutTicker` WARN logs should be downgraded to DEBUG | Already at DEBUG in source — no change needed. Resolved session 33. |
+| OQ-33-2 | ✅ | Creative mode flying triggers PRE_COLONY observations | Fixed session 33: `getAbilities().flying` replaced with `player.isCreative()`. Survival elytra flight no longer suppressed. |
 
 ---
 
@@ -61,6 +51,16 @@
 
 | # | Question | Answer | Date |
 |---|---|---|---|
+| R1 | Mod final name | **MineColonies Smart Assistant** | 2026-05-19 |
+| R2 | Flavor NPC spawn cap | **10 per player maximum** | 2026-05-19 |
+| R3 | Auto-detect client locale via packet | Claude handles locale auto-detection — not a mod implementation concern | 2026-05-19 |
+| R4 | LLM intent classification for FOLLOW/STOP/NONE | Non-issue. Flavor NPCs already respond to natural language follow/stop by name. MineColonies citizens are not controllable. Shadow entities that logically follow (e.g. Advisor) should follow by design — no intent classification needed | 2026-05-19 |
+| R5 | Full mode LLM summary paragraph — prompt design | LLM receives full diagnostic payload + Advisor persona block and produces one in-character paragraph. Constraints: (1) no mechanical data leaking through (no coordinates, raw numbers, or identifiers), (2) every factual claim must be grounded in the diagnostic data — no hallucinated content. Creative latitude on delivery only | 2026-05-19 |
+| R6 | NPC cross-awareness | Flavor NPCs are aware of other nearby NPCs. Context payload includes nearby NPC names + persona keywords. Observational only — no speaking for or contradicting other NPCs. Cross-NPC conversation history is not shared | 2026-05-19 |
+| R7 | Shadow entity multiplayer visibility | Shadow entities visible to all players in multiplayer, same as the original player | 2026-05-19 |
+| OQ-26-1 | Reasoning token billing rate on OpenRouter | Model costs are included in `model_config.json` — reasonable cost estimates derived directly from that data | 2026-05-19 |
+| OQ-26-2 | Scout `underground_scan_depth` — finalize value | **10 blocks** — finalized | 2026-05-19 |
+| OQ-26-3 | Scout compliance prompt engineering | Claude's responsibility — not a blocking open question | 2026-05-19 |
 | D2 | Full building list with dependency chains for Planner goal input mode | 45 buildings in `planner_dependencies.json` v2. Source: MineColonies `civilian.json` + `technology.json`. Reference: `docs/research_unlocks.md` | 2026-05-17 |
 | D1 | Advisor branching logic — `Observe → Diagnose → Recommend` as implementable spec | Pre-scan 5 citizens, output top 2, per-day throttle, root cause suppression window. Full spec: `docs/advisor_branching_spec_v0_2.md` | 2026-05-17 |
 | V1 | `greatfood` modifier ID | Omit — ten confirmed canonical IDs only | 2026-05-07 |
@@ -88,6 +88,8 @@
 | B3 | `PlannerDependencyRegistry.java` BUILDING_HOLDERS map for 5 new buildings | Registry is JSON-driven. No BUILDING_HOLDERS map exists or is needed. 5 new buildings already covered by `planner_dependencies.json` v2. | 2026-05-18 |
 | OQ-26-4 | `model_config.json` Java reader interval | 15-minute cache in `ModelConfigLoader.java`. Fallback paths not cached. | 2026-05-19 |
 | OQ-28-1 | Happiness threshold scale mismatch vs. actual MineColonies `getFactor()` range | Leave thresholds as-is. Advisor observes raw API values; LLM reasons about them. Config values retained for future tuning. | 2026-05-19 |
+| OQ-33-1 | `PreColonyScoutTicker` WARN logs to DEBUG | Already at DEBUG in source — no change needed. | 2026-05-19 |
+| OQ-33-2 | Creative mode flying suppresses PRE_COLONY scouting | `getAbilities().flying` → `player.isCreative()`. Survival elytra no longer gated. | 2026-05-19 |
 | OQ-30-1 | `gpt-oss-120b` as advisory candidates[0] returns `content: null` | Architectural intent confirmed — cheapest reasoning model is first. Fix was token budget: `ADVISORY_MAX_TOKENS` raised to 2000. `ModelConfigLoader` now role-aware (`getModel(role)`). | 2026-05-19 |
 
 ---

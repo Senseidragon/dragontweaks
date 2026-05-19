@@ -42,7 +42,7 @@ public class PreColonyScoutTicker {
 
         AdvisorState state = AdvisorStateData.get(server.overworld()).getState(playerUUID);
         if (state != AdvisorState.PRE_COLONY) return;
-        if (player.getAbilities().flying) return;
+        if (player.isCreative()) return;
 
         BlockPos pos = player.blockPosition();
         BlockPos lastPos = lastObservedPos.get(playerUUID);
@@ -80,9 +80,17 @@ public class PreColonyScoutTicker {
                 "Strongly warn " + player.getGameProfile().getName() + " — settling here would invite immediate raids.\n";
         }
 
+        int villageRadiusBlocks = Config.SCOUT_VILLAGE_REPORT_RADIUS.get();
+        int villageRadiusChunks = Math.max(1, villageRadiusBlocks / 16);
         BlockPos villagePos = level.findNearestMapStructure(
-                net.minecraft.tags.StructureTags.VILLAGE, pos, 150, false);
+                net.minecraft.tags.StructureTags.VILLAGE, pos, villageRadiusChunks, false);
         String villageContext = "";
+        if (villagePos != null) {
+            int dx = villagePos.getX() - pos.getX();
+            int dz = villagePos.getZ() - pos.getZ();
+            int distance = (int) Math.sqrt(dx * dx + dz * dz);
+            if (distance > villageRadiusBlocks) villagePos = null;
+        }
         if (villagePos != null) {
             int dx = villagePos.getX() - pos.getX();
             int dz = villagePos.getZ() - pos.getZ();
@@ -124,10 +132,9 @@ public class PreColonyScoutTicker {
             "Respond in 1 short sentence. Never break character. Never say you are an AI." +
             (random.nextInt(7) == 0 ? "\nYou may use dry wit if the terrain has an obvious problem." : "");
 
-        DragonTweaks.LOGGER.warn("[PreColonyScoutTicker] Firing LLM query for player={} message=\"terrain seen: {}\" prompt={}",
-                playerName, terrainLabels, scopedPrompt);
+        DragonTweaks.LOGGER.debug("[PreColonyScoutTicker] Firing LLM query for player={} terrain={}", playerName, terrainLabels);
         LLMClient.query(server, player, Component.literal("Advisor"),
-                "terrain seen: " + terrainLabels, bookAdvisor.getUUID(), scopedPrompt, LLMClient.ADVISORY_MAX_TOKENS,
-                reply -> DragonTweaks.LOGGER.warn("[PreColonyScoutTicker] LLM callback fired for player={} reply={}", playerName, reply));
+                "terrain seen: " + terrainLabels, bookAdvisor.getUUID(), scopedPrompt, LLMClient.SPECIALIZED_MAX_TOKENS, "specialized",
+                reply -> DragonTweaks.LOGGER.debug("[PreColonyScoutTicker] LLM callback fired for player={} reply={}", playerName, reply));
     }
 }

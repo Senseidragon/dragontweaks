@@ -1,7 +1,7 @@
 # DragonTweaks — Current Project State
 
 *Ground-truth reference. No session history. Facts only.*
-*Last updated: 2026-05-19 (session 31)*
+*Last updated: 2026-05-19 (session 33)*
 
 ---
 
@@ -46,7 +46,7 @@ All in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `DragonTweaksClient.java` | ✅ Complete | Client-only setup. Packet registration via `registerPackets()`. |
 | `DragonTweaksClientEvents.java` | ✅ Complete | Client event bus subscriber. |
 | `AssistantEntity.java` | ✅ Complete | Flavor NPC entity. Follow/stop, proximity, role, NBT. Idle wander + LookAtPlayer + greeting system. Wander restriction via `restrictTo()`. |
-| `AssistantCommand.java` | ✅ Complete | `/assistant` command. Subcommands: `revoke <citizenName>`, `nickname <partial> <nickname>`, `advisor`, `planner`. |
+| `AssistantCommand.java` | ✅ Complete | `/assistant` command. Subcommands: `revoke <citizenName>`, `nickname <partial> <nickname>`, `advisor`, `planner`, `list`. `list` shows all assigned citizens for the player's colony: name, ID, role, and nickname if set. |
 | `AssistantDebugCommand.java` | ✅ Complete | `/assistant debug <table>` command (permission level 2). Dumps MineColonies colony data to a timestamped `.txt` file in the run directory. Tables: `buildings`, `beds`, `happiness`, `research`, `citizens`, `workers`, `workorders`, `jobs`, `registry`, `skills`, `stats`, `visitors`. |
 | `DebugConfig.java` | ✅ Complete | Minimal flag class. `public static final boolean DEBUG_ENABLED = true`. Used to gate debug-only code paths. |
 | `AssistantRenderer.java` | ✅ Complete | Placeholder zombie renderer. |
@@ -54,17 +54,18 @@ All in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `AssistantPanelCommand.java` | ✅ Complete | Handles `/assistant advisor` and `/assistant planner`. Sends panel packets. |
 | `BookAdvisorEntity.java` | ✅ Complete | Lightweight floating entity. Extends `Entity`. State-aware tick. Glows. NBT: ownerUUID only. |
 | `BookAdvisorRenderer.java` | ✅ Complete | `@OnlyIn(Dist.CLIENT)`. Renders WRITABLE_BOOK in COLONY_WITH_CITIZEN, BOOK otherwise. Y-rotation animation. |
-| `ChatInterceptor.java` | ✅ Complete | Routes player chat to LLM. Multi-NPC addressing, PRE_COLONY and COLONY_NO_CITIZEN advisor routing, citizen conversation routing (non-assigned citizens only). BookAdvisor search radius uses `COMMAND_PROXIMITY` (was hardcoded 64 blocks). Null guard on `ba.getOwnerUUID()`. PRE_COLONY prompts corrected — advisor may discuss colony site suitability. Citizen conversation calls pass `MAX_RESPONSE_TOKENS`. COLONY_NO_CITIZEN auto-correction: if state is COLONY_NO_CITIZEN but no colony found, resets to PRE_COLONY on the spot and re-runs BookAdvisor search. BookAdvisor PRE_COLONY prompt now includes 200-block MineColonies hostile entity scan (namespace-based, excludes citizen/visitor/cavalry_horse); DANGER context injected when hostiles found. |
+| `ChatInterceptor.java` | ✅ Complete | Routes player chat to LLM. Multi-NPC addressing, PRE_COLONY and COLONY_NO_CITIZEN advisor routing, citizen conversation routing (non-assigned citizens only). BookAdvisor search radius uses `COMMAND_PROXIMITY` (was hardcoded 64 blocks). Null guard on `ba.getOwnerUUID()`. PRE_COLONY prompts corrected — advisor may discuss colony site suitability. COLONY_NO_CITIZEN auto-correction: if state is COLONY_NO_CITIZEN but no colony found, resets to PRE_COLONY on the spot and re-runs BookAdvisor search. BookAdvisor PRE_COLONY prompt includes 200-block MineColonies hostile entity scan; DANGER context injected when hostiles found. Citizen conversation passes `"flavor"` model role and `MAX_RESPONSE_TOKENS`. Citizen system prompt: output-only constraint (no reasoning/labels/tokens), compass-direction location hints from roster, forbids invented landmarks. |
 | `CitizenConversationMemory.java` | ✅ Complete | SavedData on overworld (`"dragontweaks_citizen_memory"`). Map keyed by `"colonyId:citizenId"`. Max 20 entries/citizen FIFO. Cleared on death. |
 | `CitizenInteractDetector.java` | ✅ Complete | `PlayerInteractEvent.EntityInteract` handler. Opens `RoleAssignmentPayload` flow. Passes `citizenData.getColony().getID()` to `isAssigned`. |
 | `ClientPanelHandler.java` | ✅ Complete | `@OnlyIn(Dist.CLIENT)`. Handles `OpenAdvisorPanelPacket` and `OpenPlannerPanelPacket`. |
+| `ColonyContextBuilder.java` | ✅ Complete | Builds plaintext roster for LLM context injection. Citizens: name, job, mod role if assigned, compass direction to work building relative to player (`"last seen to the north"` style). Flavor NPCs within 400-block scan included. `compassDir()` private helper (8-point). |
 | `ColonyDiagnosticCache.java` | ✅ Complete | TTL 30s. `getOrGenerate(IColony)` + `invalidate(int colonyId)`. |
 | `ColonyDiagnosticReportGenerator.java` | ✅ Complete | `generate(IColony)` → `ColonyDiagnosticReport`. All diagnostic phases including systemic pattern detection and per-citizen root cause. |
 | `Config.java` | ✅ Complete | All config values. `ADVISOR_ROOTCAUSE_SUPPRESS_DAYS` added (int, default 2, range 0–30). See Config Values section. |
 | `ConversationMemory.java` | ✅ Complete | Per-NPC conversation history. |
 | `EnvLoader.java` | ✅ Complete | Reads `.env` for API key. |
 | `FollowPlayerGoal.java` | ✅ Complete | AI goal for follow behavior. |
-| `LLMClient.java` | ✅ Complete | OpenRouter async HTTP client. `buildRequestBody` takes `maxTokens` param. Advisory calls use `ADVISORY_MAX_TOKENS = 2000`; specialized use `SPECIALIZED_MAX_TOKENS = 2000`; flavor use `MAX_RESPONSE_TOKENS = 200`. `queryWithPrompt` takes `modelRole` string for routing. Flavor queries route to `"flavor"` tier; advisory queries route to `"advisory"` tier. `parseResponse` has `isJsonNull()` guards. Reasoning block commented out. |
+| `LLMClient.java` | ✅ Complete | OpenRouter async HTTP client. `buildRequestBody` takes `maxTokens` param. Advisory calls use `ADVISORY_MAX_TOKENS = 2000`; specialized use `SPECIALIZED_MAX_TOKENS = 2000`; flavor use `MAX_RESPONSE_TOKENS = 200`. `queryWithPrompt` takes `modelRole` string for routing. Flavor queries route to `"flavor"` tier; advisory queries route to `"advisory"` tier. `parseResponse` has `isJsonNull()` guards and calls `cleanResponse()` before returning. `cleanResponse()` strips model-internal special tokens (`<|channel|>`, `<|message|>`, any `<|...|>` pattern); empty result after stripping throws `IllegalArgumentException` (triggers fallback). 8-arg `query()` callback overload takes explicit `modelRole` parameter — no hardcoded tier. Reasoning block commented out. |
 | `ModelConfigLoader.java` | ✅ Complete | Reads `run/model_config.json` via Gson. Caches full `roles` JsonObject (all tiers). `getModel(role)` navigates `roles → {role} → candidates[0] → model_id`. `getModel()` delegates to `getModel("advisory")`. 15-minute cache covers all tiers from one file read. Fallback paths not cached. Falls back to `google/gemma-4-26b-a4b-it` on any error. |
 | `ModEntities.java` | ✅ Complete | `ASSISTANT` and `BOOK_ADVISOR` DeferredHolder registrations. |
 | `NicknameData.java` | ✅ Complete | SavedData on overworld (`"dragontweaks_nicknames"`). Map keyed by `"colonyId:citizenId"`. |
@@ -72,13 +73,13 @@ All in `src/main/java/io/github/senseidragon/dragontweaks/`.
 | `OpenAdvisorPanelPacket.java` | ✅ Complete | Server→client packet carrying `AdvisorPanelPayload`. |
 | `OpenPlannerPanelPacket.java` | ✅ Complete | Server→client packet carrying `PlannerPanelPayload`. |
 | `PlannerDependencyRegistry.java` | ✅ Complete | Singleton. Loads `planner_dependencies.json` at startup. DFS chain resolution. `getChain()`, `findMatches()`, `isAutoSatisfied()`. |
-| `PreColonyScoutTicker.java` | ✅ Complete | 1200-tick proactive scouting in PRE_COLONY state. Village proximity warning injected into LLM context. WARN logs added before query and in callback. Prompt corrected — advisor may discuss colony site suitability. Passes `ADVISORY_MAX_TOKENS`. 200-block MineColonies hostile entity scan (namespace-based, excludes citizen/visitor/cavalry_horse); DANGER context injected when hostiles found. Confirmed detecting 41 camp barbarians at ~50 blocks in live test. |
+| `PreColonyScoutTicker.java` | ✅ Complete | 1200-tick proactive scouting in PRE_COLONY state. Gates on `player.isCreative()` (not `getAbilities().flying` — survival elytra no longer suppressed). Routes to `"specialized"` model with `SPECIALIZED_MAX_TOKENS`. Village search uses `SCOUT_VILLAGE_REPORT_RADIUS` config in blocks, converted to chunks; post-find block-distance guard rejects results beyond threshold. 200-block MineColonies hostile entity scan; DANGER context injected when hostiles found. Confirmed detecting 41 camp barbarians at ~50 blocks in live test. |
 | `RoleAssignmentData.java` | ✅ Complete | SavedData. Colony-scoped: `Map<String, AssistantRoleRecord>` keyed by `"colonyId:citizenId"`. All APIs require colonyId. No old integer-key migration. |
 | `RoleAssignmentPayload.java` | ✅ Complete | Server→client packet. Carries citizenName, citizenId, slotsUsed, slotsMax, availableRoles. |
 | `RoleAssignmentScreen.java` | ✅ Complete | `@OnlyIn(Dist.CLIENT)`. Scrollable role list, slot counter, Assign/Cancel. |
 | `RolePersona.java` | ✅ Complete | Role keyword → persona block mapping. |
 | `RoleSelectionPacket.java` | ✅ Complete | Client→server. Sends citizenId + selectedRole. On "Advisor": transitions AdvisorStateData to COLONY_WITH_CITIZEN. Passes `colony.getID()` to RoleAssignmentData APIs. |
-| `TerrainScanner.java` | ✅ Complete | `public static String scan(ServerLevel, BlockPos)`. Village detection via `findNearestMapStructure`. Compass direction + distance in output. |
+| `TerrainScanner.java` | ✅ Complete | `public static String scan(ServerLevel, BlockPos)`. Village detection via `findNearestMapStructure`. Uses `SCOUT_VILLAGE_REPORT_RADIUS` config in blocks, converted to chunks; post-find block-distance guard. Compass direction + distance in output. |
 | `AdvisorDiagnosticLoop.java` | ✅ Complete | Multi-citizen branching loop per `advisor_branching_spec_v0_2.md`. Pre-scan: up to 5 flagged citizens sorted red-first then alpha; top 2 selected per cycle. Root cause suppression check + daily throttle check per citizen, each in its own `server.execute()` block. Systemic fires independently and does not suppress per-citizen output. `buildCitizenPrompt(report, CitizenRecord)` — worst factor derived from per-citizen `HappinessFactor` list; commute derived from `getCommuteDistance()`. RaidStartedEvent invalidation is a TODO (stub not found). Implemented 2026-05-17. |
 | `AdvisorHotbarWatcher.java` | ✅ Complete | `PlayerTickEvent.Post`. DORMANT state only. Detects `structurize:sceptergold`. Transitions to PRE_COLONY, spawns BookAdvisorEntity. |
 | `AdvisorPanelPayload.java` | ✅ Complete | Server-side data class. Assembles from ColonyDiagnosticCache. Citizen list sorted red→yellow→healthy. |
@@ -121,6 +122,7 @@ All in `Config.java`. Verify exact field names against source before referencing
 | `ADVISOR_WHISPER_THRESHOLD` | int | 120 | Characters — above triggers whisper pattern |
 | `ADVISOR_FORCE_PRIVATE` | boolean | false | Force all responses private |
 | `ADVISOR_ROOTCAUSE_SUPPRESS_DAYS` | int | 2 | Colony days before same root cause re-fires for a citizen |
+| `SCOUT_VILLAGE_REPORT_RADIUS` | int | 256 | Max distance in blocks within which a village is reported during PRE_COLONY scouting. Converted to chunks at API call site. |
 
 ---
 
@@ -145,8 +147,9 @@ All in `Config.java`. Verify exact field names against source before referencing
 
 ### LLM Token Budget Split (locked 2026-05-19)
 - Flavor NPCs: `MAX_RESPONSE_TOKENS = 200`
-- All advisory roles (PRE_COLONY, COLONY_NO_CITIZEN, COLONY_WITH_CITIZEN): `ADVISORY_MAX_TOKENS = 750`
-- Both constants are `static final` in `LLMClient.java`.
+- All advisory roles (PRE_COLONY, COLONY_NO_CITIZEN, COLONY_WITH_CITIZEN): `ADVISORY_MAX_TOKENS = 2000`
+- Specialized roles: `SPECIALIZED_MAX_TOKENS = 2000` — defined, no callers wired yet (waiting on Planner citizen role implementation)
+- All three constants are `static final` in `LLMClient.java`.
 
 ### LLM Reasoning Block
 - Commented out in `LLMClient.java` as of 2026-05-13. Intentional — current model rejects `effort:none`.
@@ -176,6 +179,18 @@ All in `Config.java`. Verify exact field names against source before referencing
 - Full `roles` JsonObject is cached (all tiers: flavor, advisory, specialized, tactical). `getModel(role)` serves any tier from the same cached read.
 - Fallback returns (file not found, parse error) are intentionally not cached — the next call retries immediately.
 - Token budgets: flavor = 200, advisory = 2000, specialized = 2000, tactical = TBD.
+
+### Village Radius — Always Blocks, Convert at Call Site (locked 2026-05-19)
+- `findNearestMapStructure` radius parameter is in **chunks**, not blocks. This is a Minecraft API quirk.
+- All config values and design references use blocks. Conversion (`(blocks + 15) / 16`) happens only at the `findNearestMapStructure` call site.
+- A post-find block-distance guard must always follow the search to reject results that fall outside the config threshold due to chunk rounding.
+- Applies to both `PreColonyScoutTicker` and `TerrainScanner`.
+
+### LLM Model Role Routing (locked 2026-05-19)
+- Non-assigned citizens (flavor tier) always route to `"flavor"` model regardless of query content.
+- PRE_COLONY scouting routes to `"specialized"` — scouting is a Scout/specialized function.
+- COLONY_NO_CITIZEN and COLONY_WITH_CITIZEN BookAdvisor calls route to `"advisory"`.
+- No overload in `LLMClient` may hardcode a model tier string — caller always declares it explicitly.
 
 ### Advisor State Transition — CitizenJobChangedModEvent (locked 2026-05-19)
 - `CitizenJobChangedModEvent` must NOT trigger COLONY_WITH_CITIZEN → COLONY_NO_CITIZEN.

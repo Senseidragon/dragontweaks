@@ -1,5 +1,5 @@
 # DragonTweaks — In-Game Verification Checklist & Decision Log
-*Last updated: 2026-05-19 (session 31)*
+*Last updated: 2026-05-19 (session 33)*
 
 Legend: ✅ Verified | ❌ Failed/Bug | ⚠️ Flagged | 🔲 Untested/Assumed | 🚫 Not built yet | 🔁 Deferred
 
@@ -140,6 +140,7 @@ Two tiers share the LLM backend but are otherwise entirely separate systems.
 | ✅ | `/assistant delete` removes NPC | Works — confirmed in testing |
 | 🚫 | `/assistant revoke <name>` releases citizen role slot | Not yet built — tied to role assignment system, deferred |
 | ✅ | `/assistant locale [code]` manual locale override | Confirmed working in-game 2026-05-05. Locale override fires correctly; `/assistant locale reset` clears override correctly. |
+| 🔲 | `/assistant list` shows assigned citizens, roles, nicknames | Built session 33. Not yet tested in-game. |
 | 🚫 | `/assistant advisor` opens Advisor panel packet | Not yet tested |
 | 🚫 | `/assistant planner` opens Planner panel packet | Not yet tested |
 
@@ -191,6 +192,11 @@ These are to be completed before the citizen interaction work (Steps 4–7 in de
 | ✅ | PreColonyScoutTicker fires proactive scouting commentary in PRE_COLONY state | Confirmed firing, LLM query dispatched, response received (session 31). Village proximity warning and barbarian camp DANGER context both confirmed in live test. |
 | ✅ | TerrainScanner returns village direction and distance correctly | Confirmed: "village to the west (~632 blocks)" reported correctly in PRE_COLONY scout observation (session 31). |
 | ✅ | MineColonies hostile entity scan detects camp barbarians in PRE_COLONY | Confirmed: 41 camp entities detected at ~50 blocks (session 31). Namespace scan (`"minecolonies"` namespace, excluding citizen/visitor/cavalry_horse) required — `ModTags.raiders` and `ModTags.hostile` do not tag camp variants. |
+| ✅ | Non-assigned citizen (Mav) routes to flavor model, no token leaks | Session 33 live test: `[Mav]: Just sittin' 'round, thinkin' 'bout the next move, eh?` — clean flavor response, no `<|channel|>` tokens. |
+| ✅ | Citizen conversation LLM response contains no model-internal tokens | Session 33: `cleanResponse()` strip confirmed effective. No leaked tokens in any observed response. |
+| 🔲 | `/assistant list` shows assigned citizens with roles and nicknames | Command built session 33. Not yet tested in-game. |
+| 🔲 | Village radius threshold respected — villages beyond 256 blocks not reported | Built session 33. Requires PRE_COLONY state test near and beyond 256-block village. |
+| 🔲 | Survival elytra flight does not suppress PRE_COLONY scouting | Fixed session 33 (`isCreative()` gate). Not yet tested with elytra. |
 | 🚫 | ColonyDiagnosticCache generates and invalidates reports within TTL | Not yet tested |
 | 🚫 | ColonyDiagnosticReportGenerator produces correct per-citizen and systemic data | Not yet tested |
 | 🚫 | AdvisorDiagnosticLoop selects top 2 citizens and fires per-citizen LLM prompts | Not yet tested |
