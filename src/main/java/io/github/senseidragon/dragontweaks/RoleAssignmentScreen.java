@@ -48,14 +48,17 @@ public class RoleAssignmentScreen extends Screen {
         scrollOffset = 0;
 
         int btnY = topPos + PANEL_H - 38;
-        int btnW = 80;
 
         addRenderableWidget(Button.builder(Component.literal("Cancel"), btn -> onClose())
-                .bounds(leftPos + 10, btnY, btnW, 20)
+                .bounds(leftPos + 10, btnY, 55, 20)
+                .build());
+
+        addRenderableWidget(Button.builder(Component.literal("Say Hi"), btn -> onAcknowledge())
+                .bounds(leftPos + 70, btnY, 70, 20)
                 .build());
 
         assignButton = addRenderableWidget(Button.builder(Component.literal("Assign"), btn -> onAssign())
-                .bounds(leftPos + PANEL_W - btnW - 10, btnY, btnW, 20)
+                .bounds(leftPos + 145, btnY, 55, 20)
                 .build());
         assignButton.active = false;
     }
@@ -138,6 +141,11 @@ public class RoleAssignmentScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    private void onAcknowledge() {
+        PacketDistributor.sendToServer(new AcknowledgeCitizenPacket(payload.citizenId()));
+        onClose();
     }
 
     private void onAssign() {

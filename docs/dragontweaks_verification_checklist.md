@@ -1,5 +1,5 @@
 # DragonTweaks — In-Game Verification Checklist & Decision Log
-*Last updated: 2026-05-19 (session 33)*
+*Last updated: 2026-05-19 (session 36)*
 
 Legend: ✅ Verified | ❌ Failed/Bug | ⚠️ Flagged | 🔲 Untested/Assumed | 🚫 Not built yet | 🔁 Deferred
 
@@ -55,6 +55,9 @@ Hardcoding keyword expansion is **explicitly rejected** due to i18n — Japanese
 | 🔁 | NPC uses correct player name consistently | Deferred — see Player Nickname note |
 | ✅ | NPC handles unknown/nonsense words gracefully | Session 1 — "fraggle" deflected in character |
 | ✅ | NPC generates contextually aware environmental commentary | Session 2 — squid/salmon observations fit surroundings |
+| ✅ | NPC fires spontaneous unsolicited response | Session 35 live test — passed |
+| ✅ | NPC responds appropriately without a trigger keyword | Session 35 live test — passed |
+| ✅ | NPC responds appropriately to weather queries | Session 35 live test — passed |
 | 🚫 | EnvLoader reads API key from .env without errors | Not yet tested |
 | 🚫 | CitizenConversationMemory saves and retrieves entries per citizen | Not yet tested |
 | 🚫 | NicknameData saves and retrieves nicknames per citizen | Not yet tested |
@@ -185,7 +188,7 @@ These are to be completed before the citizen interaction work (Steps 4–7 in de
 | Status | Test | Notes |
 |--------|------|-------|
 | ⚠️ | BookAdvisorEntity spawns, persists, and state ticks correctly | Spawn confirmed (renderer active, ownerUUID valid in log, session 30). NBT save/load verified correct in source. Full persist-across-reload test not yet run. |
-| 🚫 | BookAdvisorRenderer displays correct book type per advisor state | Not yet tested |
+| 🚫 | BookAdvisorRenderer displays correct book type per advisor state | Not yet tested. Per-frame log spam removed session 35. |
 | 🚫 | AdvisorState enum transitions fire in correct order | Not yet tested |
 | ⚠️ | AdvisorStateData persists per-player state across sessions | Stale COLONY_NO_CITIZEN state observed (session 31) — caused by ColonyCreatedModEvent firing on world load for restored colonies. Auto-correction added to ChatInterceptor; root state persistence itself not re-verified. |
 | 🚫 | AdvisorHotbarWatcher detects scepter and transitions to PRE_COLONY | Not yet tested |
@@ -196,6 +199,7 @@ These are to be completed before the citizen interaction work (Steps 4–7 in de
 | ✅ | Citizen conversation LLM response contains no model-internal tokens | Session 33: `cleanResponse()` strip confirmed effective. No leaked tokens in any observed response. |
 | 🔲 | `/assistant list` shows assigned citizens with roles and nicknames | Command built session 33. Not yet tested in-game. |
 | 🔲 | Village radius threshold respected — villages beyond 256 blocks not reported | Built session 33. Requires PRE_COLONY state test near and beyond 256-block village. |
+| 🔲 | Scout hazard suppression — village/raider warnings not repeated when visible in conversation history | Rearchitected session 36 — now memory-based, not positional. Not yet re-tested in-game. |
 | 🔲 | Survival elytra flight does not suppress PRE_COLONY scouting | Fixed session 33 (`isCreative()` gate). Not yet tested with elytra. |
 | 🚫 | ColonyDiagnosticCache generates and invalidates reports within TTL | Not yet tested |
 | 🚫 | ColonyDiagnosticReportGenerator produces correct per-citizen and systemic data | Not yet tested |

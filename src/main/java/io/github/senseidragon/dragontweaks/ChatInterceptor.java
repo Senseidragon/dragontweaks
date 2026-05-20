@@ -317,6 +317,7 @@ public class ChatInterceptor {
                     "You are standing in a " + biomeName + " biome. Time of day: " + timeOfDay + ". Weather: " + weather + ".\n" +
                     "Nearby: " + surroundings + ".\n" +
                     "Speak candidly about this location's suitability as a colony site. Assess terrain, biome, water proximity, elevation, forest coverage, and defensibility. " +
+                    "If your conversation history shows you have already warned about a nearby village or hostile encampment, do not repeat that warning unless the player is asking about it directly.\n" +
                     "Never reference \"the game\", \"players\", or anything that breaks immersion.\n" +
                     "The person speaking to you is " + playerName + ".\n" +
                     "Respond in 1-2 sentences. Never break character. Never say you are an AI.";
@@ -357,7 +358,8 @@ public class ChatInterceptor {
                 "Respond in 1-2 sentences. Never break character. Never say you are an AI.";
             DragonTweaks.LOGGER.debug("[DragonTweaks] PRE_COLONY prompt for {} at {}:\nTERRAIN: {}\nPROMPT: {}",
                 playerName, player.blockPosition(), terrainLabels, scopedPrompt);
-            LLMClient.query(server, player, bookName, rawMessage, bookAdvisor.getUUID(), scopedPrompt);
+            UUID advisorMemoryId = UUID.nameUUIDFromBytes(("advisor:" + player.getUUID()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            LLMClient.query(server, player, bookName, rawMessage, advisorMemoryId, scopedPrompt);
         }
 
         // COLONY_NO_CITIZEN: BookAdvisorEntity response
@@ -389,7 +391,8 @@ public class ChatInterceptor {
                 "The person speaking to you is " + playerName + ".\n" +
                 "Respond in 1 short sentence under 100 characters. Never break character. Never say you are an AI.";
             DragonTweaks.LOGGER.info("[ChatInterceptor] COLONY_NO_CITIZEN LLM fire: colonyNoColony={} colonyNoBookAdvisor={} advisorState={}", colonyNoColony != null ? "present" : "null", colonyNoBookAdvisor != null ? "present" : "null", advisorState);
-            LLMClient.query(server, player, Component.literal("Advisor"), strippedMessage, colonyNoBookAdvisor.getUUID(), colonyNoPrompt);
+            UUID advisorMemoryIdNo = UUID.nameUUIDFromBytes(("advisor:" + player.getUUID()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            LLMClient.query(server, player, Component.literal("Advisor"), strippedMessage, advisorMemoryIdNo, colonyNoPrompt);
         }
 
         // COLONY_WITH_CITIZEN: BookAdvisorEntity response
@@ -438,7 +441,8 @@ public class ChatInterceptor {
                 "- Never give generic advice. Every recommendation must reference specific buildings, citizens, or data from the colony state above.\n" +
                 "- Speak as " + advisorName + ". Never break character.\n" +
                 "Respond in 1 short sentence under 100 characters.";
-            LLMClient.query(server, player, Component.literal(advisorName), cwStrippedMessage, colonyWithBookAdvisor.getUUID(), colonyWithPrompt);
+            UUID advisorMemoryIdWith = UUID.nameUUIDFromBytes(("advisor:" + player.getUUID()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            LLMClient.query(server, player, Component.literal(advisorName), cwStrippedMessage, advisorMemoryIdWith, colonyWithPrompt);
             if (cwAdvisorKeyword && citizenNameForAdvisor != null) {
                 player.sendSystemMessage(Component.literal("[" + advisorName + "]: You know, you can just call me " + advisorName + "."));
             }

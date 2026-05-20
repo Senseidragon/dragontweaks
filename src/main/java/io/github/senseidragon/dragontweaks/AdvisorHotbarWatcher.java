@@ -18,6 +18,7 @@ public class AdvisorHotbarWatcher {
     public static void onPlayerTick(PlayerTickEvent.Post event) {
         Player player = event.getEntity();
         if (!(player.level() instanceof ServerLevel serverLevel)) return;
+        if (player.getAbilities().flying) return;
 
         UUID playerUUID = player.getUUID();
 

@@ -5,6 +5,53 @@
 
 ---
 
+## 2026-05-19 — Session 36
+
+**Focus:** Replace positional hazard suppression with BookAdvisor conversation memory.
+
+**Work completed:**
+- **Backed out positional suppression (`PreColonyScoutTicker.java`):** Removed `villageWarnedPos`, `raiderWarnedPos`, `HAZARD_SUPPRESS_RADIUS` fields and all associated suppression logic. Village and raider context now always injected when present — suppression is delegated to the LLM via conversation history.
+- **Stable per-player advisor memory key (`PreColonyScoutTicker.java`, `ChatInterceptor.java`):** All four BookAdvisor `LLMClient.query()` calls now use `UUID.nameUUIDFromBytes("advisor:" + playerUUID)` as the memory key instead of the entity UUID. This makes memory persist across entity respawns and across all three advisor states (PRE_COLONY → COLONY_NO_CITIZEN → COLONY_WITH_CITIZEN) within a session.
+- **Prompt suppression instruction (`PreColonyScoutTicker.java`, `ChatInterceptor.java`):** PRE_COLONY proactive prompt and PRE_COLONY direct-chat prompt both now instruct the advisor: "If your conversation history shows you have already warned about a nearby village or hostile encampment, do not repeat that warning." The LLM sees prior observations and can apply this rule with actual context.
+
+**Decisions made:**
+- Positional suppression (Java-side) is architecturally wrong: the LLM is stateless and has no awareness of what it previously said. Conversation memory is the correct mechanism — the model sees its own prior output and can decide not to repeat it.
+- Stable memory key: `UUID.nameUUIDFromBytes("advisor:" + playerUUID)` — deterministic, consistent with the citizen NPC pattern at `ChatInterceptor.java:473`, survives entity respawns.
+- Memory persists within a server session. Does not persist across server restarts (ConversationMemory is in-memory only). Acceptable — full cross-restart persistence would require SavedData, deferred.
+
+**Deferred / carry-forward:**
+- Cross-restart persistence for BookAdvisor memory — would require SavedData. Not requested.
+
+**Build status:** PASS
+
+---
+
+## 2026-05-19 — Session 35
+
+**Focus:** Post-run log scan bug fixes — renderer log spam and scout hazard repetition.
+
+**Work completed:**
+- **BookAdvisorRenderer log spam removed (`BookAdvisorRenderer.java`):** `LOGGER.info()` call inside `render()` was firing every frame (~60/sec). Removed entirely.
+- **PRE_COLONY scout hazard suppression (`PreColonyScoutTicker.java`):** Village and raider context is now suppressed after first mention. Added `villageWarnedPos` and `raiderWarnedPos` maps (keyed by player UUID). Each hazard is injected into the prompt only once per 512-block radius. Moving 512+ blocks resets the suppression and allows re-warning in a genuinely new area.
+
+**Player notes from this session's in-game test (Claude Code messages):**
+- Feature request logged: `/assistant mow [radius]` — clears tall/short grass, bushes, flowers, vines in radius centered on player (default 64). Not implemented this session.
+- TEST PASSED: Spontaneous response
+- TEST PASSED: Responds without keyword appropriately
+- TEST PASSED: Responds appropriately to weather queries
+- TEST FAILED: Scout constantly mentions villages and golems every prompt — fixed this session.
+
+**Decisions made:**
+- Hazard suppression is Java-side (omit context block), not purely prompt-side. LLM is stateless; prompt-only instructions cannot suppress content the model never saw was mentioned before.
+- Suppress radius: 512 blocks. Player must travel 512+ blocks before a hazard type is re-warned.
+
+**Deferred / carry-forward:**
+- `/assistant mow [radius]` feature request — not yet scoped or implemented.
+
+**Build status:** PASS
+
+---
+
 ## Session Template
 
 ```
@@ -23,6 +70,25 @@
 
 **Build status:** PASS / FAIL
 ```
+
+---
+
+## 2026-05-19 — Session 34
+
+**Focus:** Two live-test bugs — LLM warmup delay on first call, and no spontaneous PRE_COLONY commentary.
+
+**Work completed:**
+- **LLM warmup ping (`LLMClient.java`, `DragonTweaks.java`):** Added `LLMClient.warmup()` — fires a minimal async 1-token request on first player login to seed the HTTP connection. Fires once per server session (tracked via `warmupFired` flag). Response is discarded. Gated on `!LITE_MODE` and `Config.LLM_ENABLED`.
+- **PRE_COLONY spontaneous commentary fix (`PreColonyScoutTicker.java`):** Removed `player.isCreative()` gate. Creative mode was silently blocking all proactive scout observations during testing. The position guard (64-block movement threshold) already prevents over-firing; no replacement gate needed.
+
+**Decisions made:**
+- Creative mode does not suppress PRE_COLONY scout observations. The position guard is the sole throttle for that system.
+- Warmup fires on first player login per server session, routes to `"advisory"` model tier.
+
+**Deferred / carry-forward:**
+- None new.
+
+**Build status:** PASS
 
 ---
 

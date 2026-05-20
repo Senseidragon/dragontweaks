@@ -11,6 +11,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,7 +43,6 @@ public class PreColonyScoutTicker {
 
         AdvisorState state = AdvisorStateData.get(server.overworld()).getState(playerUUID);
         if (state != AdvisorState.PRE_COLONY) return;
-        if (player.isCreative()) return;
 
         BlockPos pos = player.blockPosition();
         BlockPos lastPos = lastObservedPos.get(playerUUID);
@@ -128,13 +128,16 @@ public class PreColonyScoutTicker {
             "You are making an unsolicited observation — the player has not asked you anything. " +
             "Make exactly one specific, opinionated observation about this location's suitability as a colony site. Address " + playerName + " directly.\n" +
             "Assess terrain, biome, water proximity, elevation, forest coverage, defensibility, and any nearby village risk. " +
+            "If your conversation history shows you have already warned about a nearby village or hostile encampment, do not repeat that warning — focus on something new.\n" +
             "Never reference \"the game\", \"players\", or anything that breaks immersion.\n" +
             "Respond in 1 short sentence. Never break character. Never say you are an AI." +
             (random.nextInt(7) == 0 ? "\nYou may use dry wit if the terrain has an obvious problem." : "");
 
+        UUID advisorMemoryId = UUID.nameUUIDFromBytes(("advisor:" + playerUUID).getBytes(StandardCharsets.UTF_8));
+
         DragonTweaks.LOGGER.debug("[PreColonyScoutTicker] Firing LLM query for player={} terrain={}", playerName, terrainLabels);
         LLMClient.query(server, player, Component.literal("Advisor"),
-                "terrain seen: " + terrainLabels, bookAdvisor.getUUID(), scopedPrompt, LLMClient.SPECIALIZED_MAX_TOKENS, "specialized",
+                "terrain seen: " + terrainLabels, advisorMemoryId, scopedPrompt, LLMClient.SPECIALIZED_MAX_TOKENS, "specialized",
                 reply -> DragonTweaks.LOGGER.debug("[PreColonyScoutTicker] LLM callback fired for player={} reply={}", playerName, reply));
     }
 }

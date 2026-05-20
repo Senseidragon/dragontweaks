@@ -28,7 +28,6 @@ public class BookAdvisorRenderer extends EntityRenderer<BookAdvisorEntity> {
     @Override
     public void render(BookAdvisorEntity entity, float entityYaw, float partialTick,
                        PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
-        DragonTweaks.LOGGER.info("BookAdvisorRenderer.render() called, ownerUUID={}, pos={},{},{}", entity.getOwnerUUID(), entity.getX(), entity.getY(), entity.getZ());
         UUID ownerUUID = entity.getOwnerUUID();
         if (ownerUUID == null) return;
 

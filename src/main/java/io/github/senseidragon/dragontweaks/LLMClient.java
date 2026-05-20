@@ -263,6 +263,27 @@ public class LLMClient {
         EXECUTOR.shutdownNow();
     }
 
+    public static void warmup() {
+        if (!Config.LLM_ENABLED.get() || DragonTweaks.LITE_MODE) return;
+        ensureAlive();
+        String apiKey = EnvLoader.get("OPENROUTER_API_KEY");
+        if (apiKey == null) return;
+        String requestBody = buildRequestBody(ModelConfigLoader.getModel("advisory"), "Are you there?", "Respond with yes.", 1);
+        HttpRequest request;
+        try {
+            request = buildRequest(requestBody, apiKey);
+        } catch (IllegalArgumentException e) {
+            return;
+        }
+        HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+            .orTimeout(Config.LLM_TIMEOUT_SECONDS.get(), TimeUnit.SECONDS)
+            .thenAccept(r -> DragonTweaks.LOGGER.debug("[LLMClient] warmup complete"))
+            .exceptionally(ex -> {
+                DragonTweaks.LOGGER.warn("[LLMClient] warmup failed [{}]: {}", ex.getClass().getSimpleName(), ex.getMessage());
+                return null;
+            });
+    }
+
     public static void observe(AssistantEntity npc, String tierPrompt, ServerLevel level) {
         if (!Config.LLM_ENABLED.get()) return;
 

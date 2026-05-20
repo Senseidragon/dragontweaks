@@ -39,6 +39,7 @@ public class DragonTweaks {
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public static boolean LITE_MODE = false;
+    private static volatile boolean warmupFired = false;
     private static final Set<UUID> liteModeNotified = new HashSet<>();
     private static final Set<UUID> colonyGreetedPlayers = new HashSet<>();
     private static final Set<UUID> citizenArrivalNotifiedPlayers = new HashSet<>();
@@ -78,13 +79,19 @@ public class DragonTweaks {
                 sp.sendSystemMessage(Component.literal(
                     "Assistant Mod is running in Lite mode. Add an OpenRouter API key in config to unlock full AI companion features."));
             }
+            if (!LITE_MODE && !warmupFired) {
+                warmupFired = true;
+                LLMClient.warmup();
+            }
         });
     }
 
     private void registerServerPackets(RegisterPayloadHandlersEvent event) {
         event.registrar(MODID)
                 .playToServer(RoleSelectionPacket.TYPE, RoleSelectionPacket.STREAM_CODEC,
-                        RoleSelectionPacket::handleOnServer);
+                        RoleSelectionPacket::handleOnServer)
+                .playToServer(AcknowledgeCitizenPacket.TYPE, AcknowledgeCitizenPacket.STREAM_CODEC,
+                        AcknowledgeCitizenPacket::handleOnServer);
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
@@ -109,6 +116,7 @@ public class DragonTweaks {
                 if (!(e.getColony().getWorld() instanceof ServerLevel level)) return;
                 NicknameData.get(level.getServer().overworld()).removeNickname(colonyId, e.getCitizen().getId());
                 CitizenConversationMemory.get(level.getServer().overworld()).clearHistory(colonyId, e.getCitizen().getId());
+                CitizenAcknowledgmentData.get(level.getServer().overworld()).remove(colonyId, e.getCitizen().getId());
                 String citizenName = e.getCitizen().getName();
                 String prompt = citizenName + " has died. React with grief or shock in character.";
                 ObservationTicker.fireColonyEventObservation(level.getServer(), level, prompt);
